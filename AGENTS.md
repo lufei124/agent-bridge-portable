@@ -14,13 +14,6 @@
 <!-- changed-files:start -->
 ### 本次提交修改的文件
 
-- AGENT-INSTALL.md
-- src/core/codex-desktop.mjs
-- src/core/codex-desktop.test.mjs
 - src/core/codex.mjs
 - src/core/codex.test.mjs
-- src/core/failure.mjs
-- src/core/failure.test.mjs
-- src/core/runner.mjs
-- src/index.mjs
 <!-- changed-files:end -->

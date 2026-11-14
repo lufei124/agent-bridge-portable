@@ -19,6 +19,21 @@ test('matches the desktop turn ID and exact user input before reporting completi
   assert.equal(codexTurnOutcome(chunk, 'desktop-turn', '验证'), '');
 });
 
+test('projects a desktop question reply as the selected answer only', () => {
+  const record = (text) => line({
+    type: 'response_item',
+    payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] },
+  });
+  const envelope = '<send_user_message_question_reply>\n' + JSON.stringify([
+    { questionItemId: 'internal-id', question: '测试问题', answer: '已发送' },
+    { answer: '保留会话' },
+  ]) + '\n</send_user_message_question_reply>';
+  const malformed = '<send_user_message_question_reply>\n[invalid]\n</send_user_message_question_reply>';
+  const plain = '普通聊天';
+  const parsed = parseCodexLog([record(envelope), record(malformed), record(plain)].join('\n'));
+  assert.deepEqual(parsed.messages.map(({ text }) => text), ['已发送\n\n保留会话', plain]);
+});
+
 const sample = [
   line({
     timestamp: '2026-01-01T00:00:00.000Z',

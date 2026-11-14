@@ -103,7 +103,8 @@ function applyRecord(parsed, record) {
   if (record.type !== 'response_item' || payload.type !== 'message') return;
   if (payload.role !== 'user' && payload.role !== 'assistant') return;
 
-  const text = messageText(payload.content);
+  let text = messageText(payload.content);
+  if (payload.role === 'user') text = visibleCodexUserText(text);
   if (!text) return;
 
   if (payload.role === 'user' && !parsed.title) {
@@ -117,6 +118,22 @@ function applyRecord(parsed, record) {
     sessionId: parsed.id,
     cwd: parsed.cwd,
   });
+}
+
+function visibleCodexUserText(text) {
+  // Desktop replies to an input request are stored as a transport envelope.
+  const match = /^<send_user_message_question_reply>\s*([\s\S]*?)\s*<\/send_user_message_question_reply>$/i.exec(text);
+  if (!match) return text;
+  try {
+    const replies = JSON.parse(match[1]);
+    if (!Array.isArray(replies)) return '';
+    return replies
+      .map((reply) => typeof reply?.answer === 'string' ? reply.answer.trim() : '')
+      .filter(Boolean)
+      .join('\n\n');
+  } catch {
+    return '';
+  }
 }
 
 function messageText(content) {

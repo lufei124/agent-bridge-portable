@@ -95,7 +95,7 @@ tools/setup-win.mjs       一键安装脚本
 
 Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。选好项目目录后发第一条消息，桥接会在任务完成后打开新会话。续聊已有会话时，先点「查看」再发送。续跑会把结果写回各自的会话文件。
 
-在 Windows 上可以保留 Codex 桌面端原会话，再从飞书发送。桌面端处理这轮消息，并沿用该会话设置。桌面正在运行时，桥接等它空闲后再送入下一轮。桌面端处理的回合可在电脑端停止。桥接通过原会话记录核对完成情况。结果未确认时，请查看原会话，避免重复发送。桌面本地协议可能随 Codex 更新变化。
+在 Windows 上可以保留 Codex 桌面端原会话，再从飞书发送。桌面端处理这轮消息，并沿用该会话设置。桌面正在运行时，桥接等它空闲后再送入下一轮。桌面端处理的回合可在电脑端停止。桥接通过原会话记录核对完成情况。结果未确认时，请查看原会话，避免重复发送。Codex 桌面交互表单在飞书历史里显示用户选择的答案。桌面本地协议可能随 Codex 更新变化。
 
 桥接会让 DeepSeek Harness 无界面模式读取同一 Harness 配置目录里已保存的 API Key。也可以在桥的本地 `.env` 中设置 `DEEPSEEK_API_KEY` 作为备用。
 
@@ -139,13 +139,6 @@ Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。�
 <!-- changed-files:start -->
 ### 本次提交修改的文件
 
-- AGENT-INSTALL.md
-- src/core/codex-desktop.mjs
-- src/core/codex-desktop.test.mjs
 - src/core/codex.mjs
 - src/core/codex.test.mjs
-- src/core/failure.mjs
-- src/core/failure.test.mjs
-- src/core/runner.mjs
-- src/index.mjs
 <!-- changed-files:end -->
