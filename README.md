@@ -99,11 +99,13 @@ Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。�
 
 如果便携 Node 启动 Harness 时遇到 `EPERM web-profile`，在 Windows 安装系统版 Node 后，`start.cmd` 和 `check.cmd --deepseek` 会优先使用系统版。可通过本地 `.env` 的 `BRIDGE_DSH_NODE` 指定运行 DeepSeek CLI 的 Node 路径。
 
-## 会话详情
+## 会话列表与详情
+
+会话列表卡片的页码和翻页按钮位于同一排，「刷新」在右侧。
 
 点开会话后，从最新一页开始看，每页最多 10 轮。每条消息默认最多显示两行，消息之间用横线分隔。助手回复的名字前有平台图标 🐋 DeepSeek、✴️ Claude Code、🤖 Codex。点「展开」查看正文和图片，正文里的 Markdown 表格、标题和代码按富文本显示。点「收起」恢复预览。特别长的单条消息可用「上一段 / 下一段」读完。用「更早 / 后一页」翻阅当前已加载的聊天记录。
 
-切换会话时，点卡片底部的「返回列表」，再选要打开的会话。「继续」「跑一下测试」「看下状态」等快捷短语放在「刷新」「返回列表」「解绑」下面。
+切换会话时，点卡片底部的「返回列表」，再选要打开的会话。「继续」「跑一下测试」「看下状态」等快捷短语与「刷新」「返回列表」「解绑」同排显示。电脑端用户消息用飞书敲键盘表情标识，手机发出的消息用 📱 标识。
 
 ## 已知限制
 
@@ -130,5 +132,7 @@ Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。�
 ### 本次提交修改的文件
 
 - src/cards.mjs
+- src/core/conversation.mjs
+- src/core/conversation.test.mjs
 - tools/cards-smoke.mjs
 <!-- changed-files:end -->

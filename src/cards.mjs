@@ -63,6 +63,18 @@ const footer = (buttons) => ({
   columns: buttons.map((b) => ({ tag: 'column', width: 'auto', elements: [b] })),
 });
 
+function compactFooter(buttons, trailingButton) {
+  const size = 'tiny';
+  const controls = footer(buttons.map((button) => ({ ...button, size })));
+  if (trailingButton) {
+    controls.columns.push(
+      { tag: 'column', width: 'weighted', weight: 1, elements: [] },
+      { tag: 'column', width: 'auto', elements: [{ ...trailingButton, size }] },
+    );
+  }
+  return { ...controls, horizontal_spacing: '4px' };
+}
+
 /**
  * 消息翻页。
  *
@@ -192,29 +204,28 @@ export function sessionListCard({
   elements.push(hr());
   if (pages > 1) elements.push(md(`第 **${page + 1} / ${pages}** 页 · 共 ${total} 个会话`));
 
-  // 翻页单独一行：一排放太多按钮，飞书会把它们挤成"..."甚至空白
-  const pageAction = unified ? 'home' : 'src';
+  const nav = [];
+  const pageValue = (index) => unified
+    ? { a: 'home', page: index, f: filter }
+    : { a: 'src', p: platformId, page: index };
   if (pages > 1) {
-    const nav = [];
-    const pageValue = (index) =>
-      unified ? { a: pageAction, page: index, f: filter } : { a: pageAction, p: platformId, page: index };
     if (page > 0) nav.push(btn('上一页', pageValue(page - 1)));
     const first = Math.max(0, Math.min(page - 1, pages - 3));
     for (let i = first; i < Math.min(pages, first + 3); i++) {
       nav.push(btn(String(i + 1), pageValue(i), i === page ? 'primary' : 'default'));
     }
     if (page < pages - 1) nav.push(btn('下一页', pageValue(page + 1), 'primary'));
-    elements.push(footer(nav));
   }
 
-  const actions = [btn('刷新', unified ? { a: 'home', page, f: filter } : { a: 'src', p: platformId, page })];
+  const actions = [];
   if (items.some((i) => i.unread)) {
     actions.push(
       btn('清空红点', unified ? { a: 'readall', p: 'all', page, f: filter } : { a: 'readall', p: platformId, page })
     );
   }
   if (!unified) actions.push(btn('返回平台', { a: 'home' }));
-  elements.push(footer(actions));
+  if (actions.length) elements.push(footer(actions));
+  elements.push(compactFooter(nav, btn('刷新', pageValue(page))));
 
   // header.title 是 plain_text，不能做 markdown 转义，否则会显示成反斜杠
   return card(
@@ -232,11 +243,13 @@ export function sessionListCard({
 
 function messageElements(message, assistantName, sessionId, expandedMessage) {
   if (typeof message === 'string') return [md(message)];
-  const sender = message.kind === 'assistant' ? assistantName : message.from === 'phone' ? '📱 你' : '🖥 你';
+  const assistant = message.kind === 'assistant';
+  const desktopUser = !assistant && message.from !== 'phone';
+  const sender = assistant ? assistantName : desktopUser ? '你' : '📱 你';
   const label = [sender, message.time].filter(Boolean).join(' · ');
   const expanded = expandedMessage?.id === message.id;
   const action = { a: 'messageText', s: sessionId, m: message.id };
-  const preview = plainText(message.text.slice(0, 140));
+  const preview = plainText(message.text.slice(0, 120));
   const text = (content, lines) => ({
     tag: 'div',
     text: { tag: 'plain_text', content, ...(lines ? { lines } : {}) },
@@ -244,7 +257,9 @@ function messageElements(message, assistantName, sessionId, expandedMessage) {
   const header = {
     tag: 'column_set',
     flex_mode: 'none',
+    ...(desktopUser ? { horizontal_spacing: '4px' } : {}),
     columns: [
+      ...(desktopUser ? [{ tag: 'column', width: 'auto', elements: [md(':Typing:')] }] : []),
       { tag: 'column', width: 'weighted', weight: 1, elements: [
         text(expanded ? label : `${label}  ${preview || '📎 附件'}`, expanded ? undefined : 2),
       ] },
@@ -408,12 +423,12 @@ export function sessionCard({
             ],
           },
         ]),
-    footer([
+    compactFooter([
       btn('刷新', { a: 'open', s: sessionId }),
       btn('返回列表', { a: 'home' }),
       btn('解绑', { a: 'closeAsk' }),
+      ...quickReplies.map((q) => btn(q, { a: 'quick', q })),
     ]),
-    ...(quickReplies.length ? [footer(quickReplies.map((q) => btn(q, { a: 'quick', q })))] : []),
   ];
 
   const titleText = title.length > 20 ? `${title.slice(0, 20)}…` : title;

@@ -158,6 +158,10 @@ const rowCount = listCard.body.elements
   .slice(0, divider === -1 ? undefined : divider)
   .filter((e) => e.tag === 'column_set' && collectButtonText(e).includes('查看')).length;
 const labels = collectButtonText(listCard);
+const listNav = listCard.body.elements.at(-1);
+assert(collectButtonText(listNav).join(',') === '1,2,下一页,刷新', '页码、翻页和刷新应放在同一排');
+assert(listNav.columns.at(-2).width === 'weighted' && collectButtonText(listNav.columns.at(-1))[0] === '刷新',
+  '刷新按钮应在分页行的最右边');
 assert(rowCount <= PAGE_SIZE, `列表行数 ${rowCount} 超过每页上限 ${PAGE_SIZE}`);
 assert(labels.includes('下一页'), '缺少「下一页」按钮');
 assert(!labels.includes('查看全部'), '不应该再有「查看全部」（会撑长卡片）');
@@ -177,6 +181,7 @@ const cleanCard = sessionListCard({
 });
 assert(!JSON.stringify(cleanCard).includes('🔴'), '没有未读时不该出现红点');
 assert(!collectButtonText(cleanCard).includes('清空红点'), '没有未读时不该出现「清空红点」');
+assert(collectButtonText(cleanCard.body.elements.at(-1)).join(',') === '刷新', '单页会话列表应保留右侧刷新');
 
 check(
   'sessionCard',
@@ -200,8 +205,10 @@ const chatMessages = Array.from({ length: 20 }, (_, index) => ({
   id: String(index), kind: index % 2 ? 'assistant' : 'user',
   text: '这行在预览中\n第二行\n' + '长正文'.repeat(3000) + '末尾',
 }));
-const detail = { title: '对话分页', platformName: 'Codex', sessionId: 'session-1',
-  hasOlder: true, hasNewer: true, pageText: '第 2 / 3 页', messages: chatMessages };
+const detail = { title: '对话分页', platformName: 'Codex', platformId: 'codex', sessionId: 'session-1',
+  hasOlder: true, hasNewer: true, pageText: '第 2 / 3 页', messages: chatMessages,
+  quickReplies: ['继续', '跑一下测试', '看下状态'],
+};
 const compact = sessionCard(detail);
 check('sessionCard(10 轮预览)', compact);
 assert(collectButtonText(compact).filter((text) => text === '展开').length === 20, '10 轮应有 20 条可展开消息');
@@ -212,7 +219,8 @@ const expanded = sessionCard({ ...detail, expandedMessage: { id: '1', part: 0 } 
 check('sessionCard(展开超长正文)', expanded);
 assert(collectButtonText(expanded).includes('收起'));
 assert(collectButtonText(expanded).includes('下一段'));
-assert(Buffer.byteLength(JSON.stringify(expanded)) < 30_000);
+assert(Buffer.byteLength(JSON.stringify({ content: JSON.stringify(expanded) })) < 30_000,
+  '包含十轮、头像和底部按钮的展开卡片应符合飞书请求体大小限制');
 
 const tableMarkdown = '## 实测数据\n\n| 项目 | 数值 |\n| --- | --- |\n| 主库 | **1.47 GB** |';
 for (const [platformId, platformName, icon] of [
@@ -228,8 +236,18 @@ for (const [platformId, platformName, icon] of [
   const preview = sessionCard(args);
   const previewText = preview.body.elements[2].columns[0].elements[0].text;
   assert(previewText.lines === 2 && previewText.content.startsWith(`${icon} ${platformName}`), `${platformName} 回复缺少平台图标或两行预览`);
-  assert(collectButtonText(preview).slice(-6).join(',') === '刷新,返回列表,解绑,继续,跑一下测试,看下状态',
-    `${platformName} 快捷短语应放在底部操作下面`);
+  const controls = preview.body.elements.at(-1);
+  assert(controls.flex_mode === 'none' && collectButtonText(controls).join(',') === '刷新,返回列表,解绑,继续,跑一下测试,看下状态',
+    `${platformName} 快捷短语和底部操作应放在同一排`);
+  const userMessages = sessionCard({ ...args, messages: [
+    { id: 'desktop', kind: 'user', from: 'desktop', text: '电脑端消息' },
+    { id: 'phone', kind: 'user', from: 'phone', text: '手机端消息' },
+  ] });
+  const [desktopIcon, desktopText] = userMessages.body.elements[2].columns.map((col) => col.elements[0]);
+  assert(desktopIcon.content === ':Typing:' && desktopText.text.lines === 2 && desktopText.text.content.startsWith('你'),
+    `${platformName} 的电脑端用户消息应显示敲键盘表情和两行预览`);
+  assert(userMessages.body.elements[4].columns[0].elements[0].text.content.startsWith('📱 你'),
+    `${platformName} 的手机端用户消息应显示手机图标`);
   const opened = sessionCard({ ...args, expandedMessage: { id: 'reply', part: 0 } });
   check(`sessionCard(${platformName} 展开表格)`, opened);
   assert(opened.body.elements.some((el) => el.tag === 'markdown' && el.content.startsWith(tableMarkdown) && !el.content.includes('<at ')),

@@ -25,7 +25,7 @@ export function conversationPage(turns, page) {
   return turns.slice(Math.max(0, end - TURNS_PER_PAGE), end).flat();
 }
 
-// Split only exceptionally long expanded messages to stay inside Feishu's card size budget.
+// Leave room for the ten-round card, controls, and the outer JSON string escaping.
 export function messageTextPages(text) {
   const pages = [];
   let start = 0;
@@ -33,7 +33,7 @@ export function messageTextPages(text) {
   let size = 0;
   for (const character of text) {
     const bytes = Buffer.byteLength(JSON.stringify(character)) - 2;
-    if (size + bytes > 10000) {
+    if (size + bytes > 7500) {
       pages.push(text.slice(start, end));
       start = end;
       size = 0;
