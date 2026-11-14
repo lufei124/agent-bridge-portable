@@ -144,12 +144,18 @@ const listCard = sessionListCard({
 });
 check('sessionListCard(第 1 页)', listCard);
 
+for (const [platform, label] of [['claude-code', 'Claude Code'], ['codex', 'Codex'], ['deepseek', 'DeepSeek']]) {
+  const emptyList = sessionListCard({ unified: true, filter: platform, items: [] });
+  assert(collectButtonText(emptyList).includes(`新建 ${label} 会话`), '空列表也应可新建会话');
+  assert(JSON.stringify(emptyList).includes(`"a":"newSession","platform":"${platform}"`), '新建按钮应包含平台');
+}
+
 // 分页必须是"下一页"，不能再出现把全部塞进一张卡的老行为。
 // 数据行都排在分隔线之前，分隔线之后是底部按钮栏，不算行。
 const divider = listCard.body.elements.findIndex((e) => e.tag === 'hr');
 const rowCount = listCard.body.elements
   .slice(0, divider === -1 ? undefined : divider)
-  .filter((e) => e.tag === 'column_set').length;
+  .filter((e) => e.tag === 'column_set' && collectButtonText(e).includes('查看')).length;
 const labels = collectButtonText(listCard);
 assert(rowCount <= PAGE_SIZE, `列表行数 ${rowCount} 超过每页上限 ${PAGE_SIZE}`);
 assert(labels.includes('下一页'), '缺少「下一页」按钮');

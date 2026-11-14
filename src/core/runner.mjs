@@ -84,20 +84,34 @@ export function resolveCodexBin() {
 }
 
 export function resolveDshLaunch() {
-  if (process.env.DSH_BIN && fs.existsSync(process.env.DSH_BIN)) return { command: process.env.DSH_BIN, prefix: [] };
-  const cmd = commandOnPath('dsh.cmd');
-  if (!cmd) return { command: process.platform === 'win32' ? 'dsh.cmd' : 'dsh', prefix: [] };
+  const configured = process.env.BRIDGE_DSH_BIN || process.env.DSH_BIN;
+  const configuredNode = process.env.BRIDGE_DSH_NODE;
+  const node = configuredNode && fs.existsSync(configuredNode) ? configuredNode : '';
+  if (configured && fs.existsSync(configured) && /\.(?:mjs|cjs|js)$/i.test(configured)) {
+    return { command: node || process.execPath, prefix: [configured] };
+  }
+  const shim = configured && /\.cmd$/i.test(configured);
+  if (configured && fs.existsSync(configured) && !shim) return { command: configured, prefix: [] };
+  const cmd = shim && fs.existsSync(configured) ? configured : commandOnPath('dsh.cmd');
+  if (!cmd) return { command: commandOnPath('dsh.exe') || 'dsh', prefix: [] };
   const dir = path.dirname(cmd);
   const script = path.join(dir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
   if (!fs.existsSync(script)) return { command: cmd, prefix: [] };
-  const node = path.join(dir, 'node.exe');
-  return { command: fs.existsSync(node) ? node : 'node', prefix: [script] };
+  const siblingNode = path.join(dir, 'node.exe');
+  return { command: node || (fs.existsSync(siblingNode) ? siblingNode : process.execPath), prefix: [script] };
 }
 
 export function codexResumeArgs({ sessionId, cwd, prompt }) {
   const args = ['exec', '--json', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox'];
   if (cwd) args.push('-C', cwd);
   args.push('resume', sessionId, String(prompt).slice(0, 8000));
+  return args;
+}
+
+export function codexFreshArgs({ cwd, prompt }) {
+  const args = ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'workspace-write'];
+  if (cwd) args.push('-C', cwd);
+  args.push('--', String(prompt).slice(0, 8000));
   return args;
 }
 
@@ -217,8 +231,9 @@ export function runPrompt(options) {
   });
 }
 
-/** 新建会话：不 --resume，session_id 由 stream-json 的 system/init 事件带回来 */
+/** 新建会话，平台的 JSON 事件带回会话编号。 */
 export function runFresh(options) {
+  if (options.platform === 'codex') return runCodex(options, codexFreshArgs(options));
   if (options.platform === 'deepseek') return runDsh(options);
   return runClaude({ ...options, args: [] });
 }
@@ -237,12 +252,14 @@ export function runSession(options) {
   return runPrompt(options);
 }
 
-function runCodex(options) {
+function runCodex(options, args = codexResumeArgs(options)) {
   return spawnCapture({
     command: resolveCodexBin(),
-    args: codexResumeArgs(options),
+    args,
     cwd: options.cwd,
+    timeoutMs: options.timeoutMs,
     onSpawn: options.onSpawn,
+    onEvent: options.onEvent,
     trustExit: true,
   }).then((result) => ({ ...result, trustExit: true }));
 }

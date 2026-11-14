@@ -14,6 +14,9 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const lockFile = path.join(root, 'data', 'bridge.lock');
 const logFile = path.join(root, 'data', 'watchdog.log');
+const installedNode = process.platform === 'win32' && process.env.ProgramFiles
+  ? path.join(process.env.ProgramFiles, 'nodejs', 'node.exe')
+  : '';
 
 function log(message) {
   try {
@@ -43,7 +46,8 @@ function daemonPid() {
 
 function startDaemon() {
   const out = fs.openSync(path.join(root, 'data', 'bridge.log'), 'a');
-  const child = spawn(process.execPath, ['--env-file-if-exists=.env', 'src/index.mjs'], {
+  const node = installedNode && fs.existsSync(installedNode) ? installedNode : process.execPath;
+  const child = spawn(node, ['--env-file-if-exists=.env', 'src/index.mjs'], {
     cwd: root,
     detached: true,
     stdio: ['ignore', out, out],

@@ -228,9 +228,14 @@ async function handleCardAction(payload) {
       return chooseNewProject(chatId, String(form.path || '').trim(), value.platform);
 
     case 'newDeepseek':
+    case 'newSession': {
+      const requested = value.a === 'newDeepseek' ? 'deepseek' : value.platform;
+      const platform = normalizeListFilter(requested);
+      if (platform === 'all') return { toast: { type: 'error', content: '请选择会话平台' } };
       delete state.newCwd[chatId];
       delete state.pending[chatId];
-      return view(chatId, { kind: 'new', p: 'deepseek' }, newSessionCardFor('deepseek'));
+      return view(chatId, { kind: 'new', p: platform }, newSessionCardFor(platform));
+    }
 
     case 'searchAsk':
       return sendTransient(chatId, 'search', searchAskCard());
@@ -681,7 +686,7 @@ async function handleIncomingInner({ chatId, text, openId, messageId, media, cha
 
   // 附件批次还在等确认时，命令不能被当成"附件说明"吞掉
   const looksLikeCommand =
-    /^\/(?:find|搜索|status|状态|help|帮助|new|新建|files|附件|use|用|drop|丢弃|queue|排队|now|立即|open|打开|close|解绑|notify|通知|clean|清理)\b/i.test(
+    /^\/(?:find|搜索|status|状态|help|帮助|new|新建|files|附件|use|用|drop|丢弃|queue|排队|now|立即|open|打开|close|解绑|notify|通知|clean|清理)(?=\s|$)/i.test(
       input
     );
 
@@ -810,9 +815,9 @@ async function handleIncomingInner({ chatId, text, openId, messageId, media, cha
     return sendTransient(chatId, 'help', helpCard());
   }
 
-  const newMatch = input.match(/^\/(?:new|新建)(?:\s+(deepseek))?$/i);
+  const newMatch = input.match(/^\/(?:new|新建)(?:\s+(claude(?:[- ]code)?|codex|deepseek))?$/i);
   if (newMatch) {
-    const platform = newMatch[1] ? 'deepseek' : 'claude-code';
+    const platform = filterFromMenuText(newMatch[1]) || 'claude-code';
     delete state.newCwd[chatId];
     state.views[chatId] = { kind: 'new', p: platform };
     await saveState();
@@ -1500,7 +1505,8 @@ async function chooseNewProject(chatId, cwd, requestedPlatform) {
     return { toast: { type: 'error', content: '目录不存在' } };
   }
 
-  const platform = requestedPlatform === 'deepseek' ? 'deepseek' : 'claude-code';
+  const selected = normalizeListFilter(requestedPlatform);
+  const platform = selected === 'all' ? 'claude-code' : selected;
   state.newCwd[chatId] = { cwd, platform };
   state.views[chatId] = { kind: 'new', p: platform };
   await saveState();
@@ -1528,7 +1534,8 @@ async function startFreshRun(chatId, text, { cwd, platform = 'claude-code' }, so
       prompt: text,
       onEvent: (ev) => {
         if (sessionId) return;
-        const id = ev?.session_id || ev?.message?.session_id || (ev?.type === 'session' && ev.sessionId);
+        const id = ev?.session_id || ev?.message?.session_id ||
+          (ev?.type === 'session' && ev.sessionId) || (ev?.type === 'thread.started' && ev.thread_id);
         if (id) sessionId = String(id);
       },
     });
@@ -1536,9 +1543,29 @@ async function startFreshRun(chatId, text, { cwd, platform = 'claude-code' }, so
     result = { code: -1, stderr: String(err?.message || err), timedOut: false };
   }
 
+  // 部分 CLI 在首轮失败后仍会留下会话。绑定已保存的会话可让用户在同一条里重试。
+  let session = sessionId ? findSession(sessionId) : null;
+  if (sessionId && !session) {
+    const sessionStore = platform === 'codex' ? codexStore : platform === 'deepseek' ? dshStore : store;
+    await sessionStore.scan().catch(() => {});
+    session = findSession(sessionId);
+  }
+
   if (result.code !== 0) {
     const failure = explainFailure(result.stderr, platform);
     console.error(`[run] ${platform} exit ${result.code}: ${failure.detail}`);
+    if (session) {
+      if (state.views[chatId] === startView) {
+        state.bindings[chatId] = session.id;
+        await showSession(chatId, session);
+      }
+      return sendTransient(chatId, 'error', errorCard({
+        title: `${platformName} 已建会话，首轮未完成`,
+        detail: result.timedOut ? '首轮执行超时。可打开这条会话继续。' : failure.detail,
+        sessionTitle: title(session),
+        sessionId: session.id,
+      }));
+    }
     if (state.views[chatId] === startView && !state.newCwd[chatId]) {
       state.newCwd[chatId] = { cwd, platform };
       await saveState();
@@ -1550,11 +1577,9 @@ async function startFreshRun(chatId, text, { cwd, platform = 'claude-code' }, so
   }
 
   // 等 transcript 扫描到新文件
-  let session = null;
-  for (let i = 0; i < 30; i++) {
-    session = sessionId ? findSession(sessionId) : null;
-    if (session) break;
+  for (let i = 0; !session && sessionId && i < 30; i++) {
     await sleep(300);
+    session = findSession(sessionId);
   }
 
   if (!session) {

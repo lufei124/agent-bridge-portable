@@ -20,3 +20,9 @@ test('identifies Codex desktop ownership and missing DeepSeek credentials separa
   assert.match(missing.detail, /保存 API Key/);
   assert.equal(missing.retry, true);
 });
+
+test('identifies a DeepSeek startup write permission failure', () => {
+  const failure = explainFailure('DSH_WEB_START_FAILED Error: EPERM: operation not permitted', 'deepseek');
+  assert.equal(failure.title, 'Windows 拒绝写入 DeepSeek 配置');
+  assert.equal(failure.retry, true);
+});

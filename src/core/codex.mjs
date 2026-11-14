@@ -2,7 +2,7 @@
  * 只读 Codex 的 rollout 记录。
  *
  * 会话在 ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl。
- * 文件只用来发现和展示，不写回去。手机发消息续跑还没接。
+ * 会话记录由 Codex CLI 写入，本模块负责读取。
  *
  * 大文件只读开头（会话 id、目录、第一句当标题）和末尾（最近对话）。
  */
@@ -68,7 +68,8 @@ function applyRecord(parsed, record) {
 
   const payload = record.payload || {};
   if (record.type === 'session_meta') {
-    if (!parsed.id && payload.session_id) parsed.id = String(payload.session_id);
+    const id = payload.id || payload.session_id;
+    if (!parsed.id && id) parsed.id = String(id);
     if (!parsed.cwd && payload.cwd) parsed.cwd = String(payload.cwd);
     return;
   }

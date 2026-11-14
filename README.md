@@ -82,7 +82,7 @@ tools/setup-win.mjs       一键安装脚本
 | `Claude` / `Codex` / `DeepSeek` | 直接打开对应那一列。整句匹配，适合填进飞书机器人菜单的「发送文字消息」 |
 | `打开 <短ID>` | 把当前飞书对话绑定到某个会话 |
 | `关闭` | 解绑，回到全部会话 |
-| `/new deepseek` | 选项目目录，在飞书创建一条可续跑的 DeepSeek 会话 |
+| `/new` / `/new claude` / `/new codex` / `/new deepseek` | 选择项目目录，用下一条消息创建会话 |
 | `状态` | 查看绑定、运行状态、排队数 |
 | 直接发文字 | 送进当前打开的 Claude、Codex 或 DeepSeek 会话。它正在跑就自动排队 |
 | `1` / `2` | 会话正忙时选择「立即插入」或「排队」 |
@@ -93,9 +93,11 @@ tools/setup-win.mjs       一键安装脚本
 | `/notify on\|off` | 回合结束是否另发摘要 |
 | `/clean on\|off` | 群聊里是否撤回你发的消息 |
 
-在列表上先选「查看」打开目标会话，再输入消息。续跑会把结果写回各自的会话文件。Codex 桌面端占用会话时，请先关闭对应会话。桥接会让 DeepSeek Harness 无界面模式读取同一 Harness 配置目录里已保存的 API Key。也可以在桥的本地 `.env` 中设置 `DEEPSEEK_API_KEY` 作为备用。
+Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。选好项目目录后发第一条消息，桥接会在任务完成后打开新会话。续聊已有会话时，先点「查看」再发送。续跑会把结果写回各自的会话文件。Codex 桌面端占用会话时，请先关闭对应会话。桥接会让 DeepSeek Harness 无界面模式读取同一 Harness 配置目录里已保存的 API Key。也可以在桥的本地 `.env` 中设置 `DEEPSEEK_API_KEY` 作为备用。
 
-对于原有的 DeepSeek 桌面会话，请在飞书的 DeepSeek 列表打开原会话后发送消息。会话沿用原来的模型与登录方式。电脑端占用原会话时，请先关闭对应会话再重发。桥接使用与桌面端相同的 `DSH_HOME`（默认 `~/.dsh`）。
+对于原有的 DeepSeek 桌面会话，请在飞书的 DeepSeek 列表打开原会话后发送消息。会话沿用原来的模型与登录方式。电脑端占用原会话时，请先关闭对应会话再重发。桥接使用与桌面端相同的 `DSH_HOME`（默认 `~/.dsh`）。如果原会话服务启动失败，在电脑的命令提示符中运行 `check.cmd --deepseek`。该命令检查会话服务和文件权限，不提交聊天消息。
+
+如果便携 Node 启动 Harness 时遇到 `EPERM web-profile`，在 Windows 安装系统版 Node 后，`start.cmd` 和 `check.cmd --deepseek` 会优先使用系统版。可通过本地 `.env` 的 `BRIDGE_DSH_NODE` 指定运行 DeepSeek CLI 的 Node 路径。
 
 ## 已知限制
 

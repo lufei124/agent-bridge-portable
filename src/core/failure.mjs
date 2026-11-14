@@ -17,6 +17,12 @@ export function explainFailure(text, platform) {
   if (platform === 'deepseek' && /DSH_WEB_(?:REPLY_UNCONFIRMED|PROMPT_UNCONFIRMED|TURN_TIMEOUT)/.test(value)) {
     return { title: 'DeepSeek 本轮结果未确认', detail: '请先打开原会话查看消息和回复，再决定是否重试。', retry: false };
   }
+  if (platform === 'deepseek' && /DSH_WEB_START/.test(value) && /\b(?:EPERM|EACCES)\b|access is denied|拒绝访问/i.test(value)) {
+    return { title: 'Windows 拒绝写入 DeepSeek 配置', detail: 'DeepSeek 本机会话服务未能更新配置。恢复配置目录的写入权限后，可重发这条消息。', retry: true };
+  }
+  if (platform === 'deepseek' && /DSH_WEB_START/.test(value) && /\b(?:ENOENT|EINVAL)\b/.test(value)) {
+    return { title: '桥接未能启动 DeepSeek CLI', detail: '请检查桥接能否找到 dsh 和 Node.js，再重发。', retry: true };
+  }
   if (platform === 'deepseek' && /DSH_WEB_(?:START|AUTH)/.test(value)) {
     return { title: 'DeepSeek 本机会话服务未就绪', detail: '请检查电脑端 DeepSeek Harness 是否能正常打开会话和读取设置，再重试。', retry: true };
   }

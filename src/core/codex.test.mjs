@@ -69,6 +69,11 @@ test('reads id, folder, title and the dialogue', () => {
   );
 });
 
+test('reads the id field written by current Codex CLI rollouts', () => {
+  const metadata = line({ type: 'session_meta', payload: { id: 'current-id', cwd: 'E:/work/demo' } });
+  assert.equal(parseCodexLog(metadata).id, 'current-id');
+});
+
 test('a turn still marked started is running', () => {
   const text = [
     line({

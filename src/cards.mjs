@@ -151,10 +151,14 @@ export function sessionListCard({
         filterBtn('deepseek', 'DeepSeek'),
       ])
     );
-    if (filter === 'deepseek') {
-      elements.push(footer([btn('新建 DeepSeek 会话', { a: 'newDeepseek' }, 'primary')]));
-    }
     elements.push(md('点「查看」打开要发送消息的会话。'));
+  }
+
+  const creationPlatform = unified ? filter : platformId;
+  if (['claude-code', 'codex', 'deepseek'].includes(creationPlatform)) {
+    elements.push(footer([
+      btn(`新建 ${sessionFilterName(creationPlatform)} 会话`, { a: 'newSession', platform: creationPlatform }, 'primary'),
+    ]));
   }
 
   if (!total) {
@@ -528,7 +532,7 @@ export function helpCard() {
         '- `/notify on|off` 完成时是否另发一条摘要\n' +
         '- `/clean on|off` 群聊里是否撤回你发过的消息（默认关，撤回会留提示）\n' +
         '- `/find 关键字` 搜索会话（标题/项目/消息）\n' +
-        '- `/new` 新建 Claude 会话 · `/new deepseek` 新建 DeepSeek 会话\n' +
+        '- `/new` 新建 Claude 会话 · `/new codex` 新建 Codex 会话 · `/new deepseek` 新建 DeepSeek 会话\n' +
         '- `/open <id>` 打开会话 · `/close` 解绑 · `/status` 刷新卡片'
     ),
   ]);

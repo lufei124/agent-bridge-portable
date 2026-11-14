@@ -3,7 +3,7 @@
  *
  *   runtime\node.exe tools\doctor.mjs
  *
- * 只读，不改任何东西。装完不确定成没成、或者手机上没反应，先跑它。
+ * 普通体检只读。--deepseek 会启动一次本机 Harness 服务来检查历史会话。
  * 退出码：0 = 全部通过，1 = 有硬伤。
  */
 
@@ -12,11 +12,33 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { DshStore } from '../src/core/dsh.mjs';
+import { dshStartupDiagnostic, openDshWeb } from '../src/core/dsh-web.mjs';
+import { resolveDshLaunch } from '../src/core/runner.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ENV_FILE = path.join(ROOT, '.env');
 const LOCK_FILE = path.join(ROOT, 'data', 'bridge.lock');
 const LOG_FILE = path.join(ROOT, 'data', 'bridge.log');
+
+if (process.argv.includes('--deepseek')) {
+  let host;
+  try {
+    const store = new DshStore({ dir: process.env.DSH_SESSIONS_DIR });
+    await store.scan();
+    const session = store.list().find((entry) => entry.agentPreset && !entry.subagent && entry.cwd && fs.existsSync(entry.cwd));
+    if (!session) throw new Error('DSH_WEB_START_NO_PRESET_SESSION');
+    host = await openDshWeb(resolveDshLaunch(), { cwd: session.cwd });
+    await host.call('state', { sessionId: session.id });
+    console.log('DeepSeek 本机会话服务正常，已读取原有预设会话。');
+  } catch (error) {
+    console.error('DeepSeek 检查失败', error.code || dshStartupDiagnostic(error.message));
+    process.exitCode = 1;
+  } finally {
+    await host?.close();
+  }
+  process.exit(process.exitCode || 0);
+}
 
 const C = { reset: '\x1b[0m', dim: '\x1b[2m', green: '\x1b[32m', yellow: '\x1b[33m', red: '\x1b[31m' };
 const tty = process.stdout.isTTY;

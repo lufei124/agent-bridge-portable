@@ -4,6 +4,20 @@ import { createInterface } from 'node:readline';
 
 const START_TIMEOUT_MS = 25_000;
 const TURN_TIMEOUT_MS = 15 * 60_000;
+const START_ERROR_CODES = /\b(?:EACCES|EPERM|ENOENT|EINVAL|ECONNREFUSED|ETIMEDOUT|ENETUNREACH|UND_ERR_[A-Z_]+)\b/g;
+
+export function dshStartupDiagnostic(message) {
+  const lines = String(message).split(/\r?\n/);
+  const denied = lines.find((line) => /\b(?:EPERM|EACCES)\b.*['"]/.test(line));
+  const deniedPath = denied?.match(/['"]([^'"]+)['"]\s*$/)?.[1] || '';
+  const target = deniedPath.replace(/\\/g, '/');
+  const resource = /\/cordis\.yml$/i.test(target) ? 'web-profile'
+    : /\/\.credentials\.yaml(?:\.lock)?$/i.test(target) ? 'credentials'
+    : /\/sessions(?:\/|$)/i.test(target) ? 'sessions'
+    : target ? 'other-file' : '';
+  const marker = String(message).match(/^DSH_WEB_[A-Z_]+/)?.[0] || 'DSH_WEB_START_FAILED';
+  return [marker, ...new Set(String(message).match(START_ERROR_CODES) || []), resource].filter(Boolean).join(' ');
+}
 
 export function localLaunchUrl(line) {
   if (!line.startsWith('dsh web: ')) return null;
@@ -41,7 +55,9 @@ export async function openDshWeb(launch, { cwd, onSpawn } = {}) {
         clearTimeout(timer);
         callback(value);
       };
-      child.once('error', done(reject));
+      child.once('error', done((error) => reject(new Error(
+        `DSH_WEB_START_FAILED ${error.code || 'SPAWN_ERROR'}`, { cause: error },
+      ))));
       void exited.then(done(() => reject(new Error(`DSH_WEB_START_FAILED ${startupError}`))));
       output.on('line', (line) => {
         const url = localLaunchUrl(line);
@@ -85,7 +101,7 @@ export async function openDshWeb(launch, { cwd, onSpawn } = {}) {
   } catch (error) {
     await close();
     if (error.message.includes('DSH_WEB_START') || error.message === 'DSH_WEB_AUTH_FAILED') throw error;
-    throw new Error('DSH_WEB_START_FAILED', { cause: error });
+    throw new Error(`DSH_WEB_START_FAILED ${error.cause?.code || error.code || error.name}`, { cause: error });
   }
 }
 
@@ -117,6 +133,9 @@ export async function runPresetSession(launch, { cwd, sessionId, prompt, onSpawn
   } catch (error) {
     if (status === 'sending' && ['session/writer-held', 'session/not-found'].includes(error.code)) {
       status = 'before-send';
+    }
+    if (status === 'before-send' && /^DSH_WEB_(?:START|AUTH)/.test(error.message)) {
+      console.warn('[deepseek-web] 本机服务启动失败', dshStartupDiagnostic(error.message));
     }
     return failure([error.code, error.message].filter(Boolean).join(' '));
   } finally {

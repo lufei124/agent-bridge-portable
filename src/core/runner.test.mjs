@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { codexResumeArgs, dshLaunchArgs, exeBesideNpmCmd, newestCodexExe } from './runner.mjs';
+import { codexFreshArgs, codexResumeArgs, dshLaunchArgs, exeBesideNpmCmd, newestCodexExe, resolveDshLaunch } from './runner.mjs';
 
 test('codex resume keeps the prompt as one argument', () => {
   const args = codexResumeArgs({
@@ -13,6 +13,12 @@ test('codex resume keeps the prompt as one argument', () => {
   });
   assert.deepEqual(args.slice(0, 4), ['exec', '--json', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox']);
   assert.deepEqual(args.slice(-5), ['-C', 'E:/work/demo', 'resume', 'abc-123', '继续改登录页']);
+});
+
+test('codex creates a saved session with the chosen directory and a literal first prompt', () => {
+  assert.deepEqual(codexFreshArgs({ cwd: 'E:/My Project', prompt: '--help' }), [
+    'exec', '--json', '--skip-git-repo-check', '--sandbox', 'workspace-write', '-C', 'E:/My Project', '--', '--help',
+  ]);
 });
 
 test('deepseek resume targets the saved session id', () => {
@@ -40,6 +46,28 @@ test('deepseek fresh runs let the CLI allocate a new id', () => {
   const args = dshLaunchArgs({ prompt: '--help' });
   assert.ok(!args.includes('--session-id'));
   assert.deepEqual(args.slice(-2), ['--', '--help']);
+});
+
+test('deepseek runs a configured JS entry with the bridge Node even outside PATH', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bridge-dsh-bin-'));
+  const script = path.join(dir, 'bin.js');
+  fs.writeFileSync(script, '');
+  const previous = process.env.BRIDGE_DSH_BIN;
+  const previousNode = process.env.BRIDGE_DSH_NODE;
+  t.after(() => {
+    if (previous === undefined) delete process.env.BRIDGE_DSH_BIN;
+    else process.env.BRIDGE_DSH_BIN = previous;
+    if (previousNode === undefined) delete process.env.BRIDGE_DSH_NODE;
+    else process.env.BRIDGE_DSH_NODE = previousNode;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  process.env.BRIDGE_DSH_BIN = script;
+  delete process.env.BRIDGE_DSH_NODE;
+  assert.deepEqual(resolveDshLaunch(), { command: process.execPath, prefix: [script] });
+  const node = path.join(dir, 'node.exe');
+  fs.writeFileSync(node, '');
+  process.env.BRIDGE_DSH_NODE = node;
+  assert.deepEqual(resolveDshLaunch(), { command: node, prefix: [script] });
 });
 
 test('npm cmd shim resolves to the neighboring exe', () => {
