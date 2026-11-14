@@ -218,7 +218,26 @@ export function sessionListCard({
 
 // ------------------------------------------------------------ 第 3 层：会话详情
 
-function messageElements(message, assistantName, sessionId, expandedMessage) {
+function collapsiblePanel(title, elements) {
+  return {
+    tag: 'collapsible_panel',
+    expanded: false,
+    padding: '0px',
+    header: {
+      title,
+      padding: '2px 0px',
+      icon: { tag: 'standard_icon', token: 'down-small-ccm_outlined', size: '16px 16px' },
+      icon_position: 'right',
+    },
+    elements,
+  };
+}
+
+// Count bytes after the card JSON has been encoded as the API's content string.
+const DETAIL_CARD_BUDGET = 29_000;
+const encodedBytes = (value) => Buffer.byteLength(JSON.stringify(JSON.stringify(value)));
+
+function messageElements(message, assistantName, sessionId, expandedMessage, nativePanels) {
   if (typeof message === 'string') return [md(message)];
   const assistant = message.kind === 'assistant';
   const desktopUser = !assistant && message.from !== 'phone';
@@ -227,28 +246,42 @@ function messageElements(message, assistantName, sessionId, expandedMessage) {
   const expanded = expandedMessage?.id === message.id;
   const action = { a: 'messageText', s: sessionId, m: message.id };
   const preview = plainText(message.text.slice(0, 120));
+  const summary = `${label}  ${preview || '📎 附件'}`;
   const text = (content, lines) => ({
     tag: 'div',
     text: { tag: 'plain_text', content, ...(lines ? { lines } : {}) },
   });
+  const typingIcon = { tag: 'column', width: 'auto', elements: [md(':Typing:')] };
   const header = {
     tag: 'column_set',
     flex_mode: 'none',
     ...(desktopUser ? { horizontal_spacing: '4px' } : {}),
     columns: [
-      ...(desktopUser ? [{ tag: 'column', width: 'auto', elements: [md(':Typing:')] }] : []),
+      ...(desktopUser ? [typingIcon] : []),
       { tag: 'column', width: 'weighted', weight: 1, elements: [
-        text(expanded ? label : `${label}  ${preview || '📎 附件'}`, expanded ? undefined : 2),
+        text(expanded ? label : summary, expanded ? undefined : 2),
       ] },
       { tag: 'column', width: 'auto', elements: [btn(expanded ? '收起' : '展开', { ...action, part: expanded ? -1 : 0 })] },
     ],
   };
-  if (!expanded) return [header];
-
+  if (!expanded && message.text.length >= DETAIL_CARD_BUDGET) return [header];
   // Preserve Markdown formatting without letting historical text notify people again.
-  const parts = messageTextPages(message.text.replace(/<(?=\/?at(?:\s|\/?>))/gi, '&lt;'));
-  const part = Math.min(expandedMessage.part, parts.length - 1);
+  const body = message.text.replace(/<(?=\/?at(?:\s|\/?>))/gi, '&lt;');
   const images = (message.images || []).slice(0, 3).map((key) => ({ tag: 'img', img_key: key, preview: true }));
+  if (!expanded) {
+    if (body.trim() || images.length) {
+      const panel = collapsiblePanel({ tag: 'plain_text', content: summary, lines: 2 },
+        [...images, ...(body.trim() ? [md(body)] : [])]);
+      nativePanels.set(header, desktopUser ? {
+        ...header,
+        columns: [typingIcon, { tag: 'column', width: 'weighted', weight: 1, elements: [panel] }],
+      } : panel);
+    }
+    return [header];
+  }
+
+  const parts = messageTextPages(body);
+  const part = Math.min(expandedMessage.part, parts.length - 1);
   const pageButtons = [];
   if (part > 0) pageButtons.push(btn('上一段', { ...action, part: part - 1 }));
   if (part < parts.length - 1) pageButtons.push(btn('下一段', { ...action, part: part + 1 }));
@@ -311,6 +344,7 @@ export function sessionCard({
     return head;
   })();
 
+  const nativePanels = new Map();
   const elements = [
     md(metaLine),
     hr(),
@@ -336,7 +370,7 @@ export function sessionCard({
     ...(messages.length
       ? messages.flatMap((message, index) => [
           ...(index ? [hr()] : []),
-          ...messageElements(message, assistantName, sessionId, expandedMessage),
+          ...messageElements(message, assistantName, sessionId, expandedMessage, nativePanels),
         ])
       : [md('_还没有对话记录_')]),
     ...(pages > 1 ? [
@@ -386,21 +420,13 @@ export function sessionCard({
     ...(readOnly
       ? []
       : [
-          {
-            tag: 'collapsible_panel',
-            expanded: false,
-            header: {
-              title: { tag: 'plain_text', content: '命令与用法' },
-              padding: '2px',
-            },
-            elements: [
-              md(
-                '`/files` 看本会话附件 · `/use 3` 复用第 3 个 · `/drop` 丢弃待发附件\n' +
-                  '`/queue 内容` 排队 · `/now 内容` 排到队首 · `/notify on|off` 完成摘要\n' +
-                  '图片/文件：聊天框「+」，先确认再读，可撤回。'
-              ),
-            ],
-          },
+          collapsiblePanel({ tag: 'plain_text', content: '命令与用法' }, [
+            md(
+              '`/files` 看本会话附件 · `/use 3` 复用第 3 个 · `/drop` 丢弃待发附件\n' +
+                '`/queue 内容` 排队 · `/now 内容` 排到队首 · `/notify on|off` 完成摘要\n' +
+                '图片/文件：聊天框「+」，先确认再读，可撤回。'
+            ),
+          ]),
         ]),
     compactFooter([
       btn('刷新', { a: 'open', s: sessionId }),
@@ -411,10 +437,22 @@ export function sessionCard({
   ];
 
   const titleText = title.length > 20 ? `${title.slice(0, 20)}…` : title;
-  return card(
+  const result = card(
     { title: `${running ? '🟢' : '⚪'} ${titleText}`, template: tone || (running ? 'green' : 'blue') },
     elements
   );
+  // The collapsed bodies count against the same 30 KB request limit as visible content.
+  let available = DETAIL_CARD_BUDGET - encodedBytes(result);
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const panel = nativePanels.get(elements[i]);
+    if (!panel) continue;
+    const additional = encodedBytes(panel) - encodedBytes(elements[i]);
+    if (additional <= available) {
+      elements[i] = panel;
+      available -= additional;
+    }
+  }
+  return result;
 }
 
 // ------------------------------------------------------------ 其他

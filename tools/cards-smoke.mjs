@@ -34,6 +34,7 @@ const KNOWN_TAGS = new Set([
   'button',
   'plain_text',
   'collapsible_panel',
+  'standard_icon',
   'img',
 ]);
 
@@ -224,6 +225,14 @@ assert(collectButtonText(expanded).includes('下一段'));
 assert(Buffer.byteLength(JSON.stringify({ content: JSON.stringify(expanded) })) < 30_000,
   '包含十轮、头像和底部按钮的展开卡片应符合飞书请求体大小限制');
 
+const crowded = sessionCard({ ...detail, messages: chatMessages.map((message) => ({
+  ...message, text: message.text.slice(0, 1000),
+})) });
+const inlinePanels = crowded.body.elements.filter((el) => el.tag === 'collapsible_panel' && el.header.title.content !== '命令与用法');
+assert(inlinePanels.length > 0 && collectButtonText(crowded).includes('展开'), '正文较多时应同时支持原生折叠和按需展开');
+assert(Buffer.byteLength(JSON.stringify({ content: JSON.stringify(crowded) })) < 30_000,
+  '折叠正文也应计入飞书请求体大小限制');
+
 const tableMarkdown = '## 实测数据\n\n| 项目 | 数值 |\n| --- | --- |\n| 主库 | **1.47 GB** |';
 for (const [platformId, platformName, icon] of [
   ['deepseek', 'DeepSeek', '🐋'],
@@ -236,7 +245,10 @@ for (const [platformId, platformName, icon] of [
     messages: [{ id: 'reply', kind: 'assistant', text: `${tableMarkdown}\n\n<at id=all></at>` }],
   };
   const preview = sessionCard(args);
-  const previewText = preview.body.elements[2].columns[0].elements[0].text;
+  const panel = preview.body.elements[2];
+  const previewText = panel.header.title;
+  assert(panel.tag === 'collapsible_panel' && !panel.expanded && !collectButtonText(panel).length,
+    `${platformName} 消息应由飞书客户端直接展开和收起`);
   assert(previewText.lines === 2 && previewText.content.startsWith(`${icon} ${platformName}`), `${platformName} 回复缺少平台图标或两行预览`);
   const controls = preview.body.elements.at(-1);
   assert(controls.flex_mode === 'none' && collectButtonText(controls).join(',') === '刷新,返回列表,解绑,继续,跑一下测试,看下状态',
@@ -253,16 +265,19 @@ for (const [platformId, platformName, icon] of [
   assert(collectButtonText(lastPager).join(',') === '上一页,1,2' && lastPager?.columns[2]?.elements[0]?.type === 'primary',
     `${platformName} 最后一页应高亮当前页，并可翻回上一页`);
   const userMessages = sessionCard({ ...args, messages: [
-    { id: 'desktop', kind: 'user', from: 'desktop', text: '电脑端消息' },
+    { id: 'desktop', kind: 'user', from: 'desktop', text: '电脑端消息', images: ['img_test'] },
     { id: 'phone', kind: 'user', from: 'phone', text: '手机端消息' },
   ] });
-  const [desktopIcon, desktopText] = userMessages.body.elements[2].columns.map((col) => col.elements[0]);
-  assert(desktopIcon.content === ':Typing:' && desktopText.text.lines === 2 && desktopText.text.content.startsWith('你'),
+  const [desktopIcon, desktopPanel] = userMessages.body.elements[2].columns.map((col) => col.elements[0]);
+  assert(desktopIcon.content === ':Typing:' && desktopPanel.header.title.lines === 2 && desktopPanel.header.title.content.startsWith('你'),
     `${platformName} 的电脑端用户消息应显示敲键盘表情和两行预览`);
-  assert(userMessages.body.elements[4].columns[0].elements[0].text.content.startsWith('📱 你'),
+  assert(desktopPanel.elements.some((el) => el.tag === 'img' && el.img_key === 'img_test'), '折叠正文应包含图片');
+  assert(userMessages.body.elements[4].header.title.content.startsWith('📱 你'),
     `${platformName} 的手机端用户消息应显示手机图标`);
   const opened = sessionCard({ ...args, expandedMessage: { id: 'reply', part: 0 } });
   check(`sessionCard(${platformName} 展开表格)`, opened);
+  assert(panel.elements.some((el) => el.tag === 'markdown' && el.content.startsWith(tableMarkdown) && !el.content.includes('<at ')),
+    `${platformName} 原生折叠面板应包含富文本表格，并转义历史提及`);
   assert(opened.body.elements.some((el) => el.tag === 'markdown' && el.content.startsWith(tableMarkdown) && !el.content.includes('<at ')),
     `${platformName} 展开正文应保留表格格式，历史提及不应再次触发`);
 }
