@@ -1,4 +1,4 @@
-import { sessionFilterName } from './platforms.mjs';
+import { findPlatform, sessionFilterName } from './platforms.mjs';
 import { messageTextPages } from './core/conversation.mjs';
 
 /**
@@ -253,7 +253,8 @@ function messageElements(message, assistantName, sessionId, expandedMessage) {
   };
   if (!expanded) return [header];
 
-  const parts = messageTextPages(message.text);
+  // Preserve Markdown formatting without letting historical text notify people again.
+  const parts = messageTextPages(message.text.replace(/<(?=\/?at(?:\s|\/?>))/gi, '&lt;'));
   const part = Math.min(expandedMessage.part, parts.length - 1);
   const images = (message.images || []).slice(0, 3).map((key) => ({ tag: 'img', img_key: key, preview: true }));
   const pageButtons = [];
@@ -262,7 +263,7 @@ function messageElements(message, assistantName, sessionId, expandedMessage) {
   return [
     header,
     ...(part === 0 ? images : []),
-    ...(parts[part] ? [text(parts[part])] : []),
+    ...(parts[part] ? [md(parts[part])] : []),
     ...(pageButtons.length ? [text(`第 ${part + 1} / ${parts.length} 段`), footer(pageButtons)] : []),
   ];
 }
@@ -293,7 +294,8 @@ export function sessionCard({
   platformId,
   readOnly = false,
 }) {
-  const assistantName = platformName || 'Claude';
+  const platform = findPlatform(platformId);
+  const assistantName = [platform?.icon, platformName || platform?.name || 'Claude'].filter(Boolean).join(' ');
 
   // 头部压成一行：持有者 · 已跑时长 · 最后活跃 · 排队
   const metaLine = [
@@ -343,15 +345,20 @@ export function sessionCard({
       : []),
     ...(recents.length
       ? [
+          md('**最近会话**'),
           {
             tag: 'column_set',
             flex_mode: 'none',
             margin: '0px 0px 6px 0px',
-            columns: recents.map((r) => ({
-              tag: 'column',
-              width: 'auto',
-              elements: [btn(r.label, { a: 'open', s: r.id })],
-            })),
+            columns: recents.map((recent, index) => {
+              const shortTitle = Array.from(recent.title).slice(0, 8).join('');
+              const label = /\p{Script=Han}/u.test(shortTitle) ? shortTitle : `会话 ${index + 1}`;
+              return {
+                tag: 'column',
+                width: 'auto',
+                elements: [btn(label, { a: 'open', s: recent.id })],
+              };
+            }),
           },
         ]
       : []),

@@ -214,6 +214,33 @@ assert(collectButtonText(expanded).includes('收起'));
 assert(collectButtonText(expanded).includes('下一段'));
 assert(Buffer.byteLength(JSON.stringify(expanded)) < 30_000);
 
+const tableMarkdown = '## 实测数据\n\n| 项目 | 数值 |\n| --- | --- |\n| 主库 | **1.47 GB** |';
+for (const [platformId, platformName, icon] of [
+  ['deepseek', 'DeepSeek', '🐋'],
+  ['claude-code', 'Claude Code', '✴️'],
+  ['codex', 'Codex', '🤖'],
+]) {
+  const args = {
+    title: '查看实测数据', sessionId: 'session-1', platformId, platformName,
+    messages: [{ id: 'reply', kind: 'assistant', text: `${tableMarkdown}\n\n<at id=all></at>` }],
+  };
+  const preview = sessionCard(args);
+  const previewText = preview.body.elements[2].columns[0].elements[0].text;
+  assert(previewText.lines === 2 && previewText.content.startsWith(`${icon} ${platformName}`), `${platformName} 回复缺少平台图标或两行预览`);
+  const opened = sessionCard({ ...args, expandedMessage: { id: 'reply', part: 0 } });
+  check(`sessionCard(${platformName} 展开表格)`, opened);
+  assert(opened.body.elements.some((el) => el.tag === 'markdown' && el.content.startsWith(tableMarkdown) && !el.content.includes('<at ')),
+    `${platformName} 展开正文应保留表格格式，历史提及不应再次触发`);
+}
+
+const withRecents = sessionCard({ ...detail, recents: [
+  { id: 'a', title: 'Bridge configuration' },
+  { id: 'b', title: '回复问题' },
+  { id: 'c', title: 'DATE' },
+] });
+assert(collectButtonText(withRecents).slice(0, 3).join(',') === '会话 1,回复问题,会话 3', '最近会话应使用中文按钮');
+assert(JSON.stringify(withRecents).includes('"a":"open","s":"a"'), '快捷按钮应保留会话跳转');
+
 const ownerCard = ownerBusyCard({
   title: '修复构建脚本',
   excerpt: '先跑一下测试',

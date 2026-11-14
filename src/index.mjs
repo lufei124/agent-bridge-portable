@@ -1847,7 +1847,7 @@ function renderSession(session, chatId) {
     .filter((s) => s.id !== session.id)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 3)
-    .map((s) => ({ id: s.id, label: title(s).slice(0, 8) }));
+    .map((s) => ({ id: s.id, title: title(s) }));
 
   return sessionCard({
     title: title(session),

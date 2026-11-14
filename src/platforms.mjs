@@ -20,6 +20,7 @@ export const PLATFORMS = [
   {
     id: 'claude-code',
     name: 'Claude Code',
+    icon: '✴️',
     subtitle: 'VS Code 插件 · 命令行',
     probe: path.join(HOME, '.claude', 'projects'),
     ready: true,
@@ -27,6 +28,7 @@ export const PLATFORMS = [
   {
     id: 'codex',
     name: 'Codex',
+    icon: '🤖',
     subtitle: 'OpenAI · 命令行 / IDE',
     probe: path.join(HOME, '.codex', 'sessions'),
     ready: true,
@@ -34,6 +36,7 @@ export const PLATFORMS = [
   {
     id: 'deepseek',
     name: 'DeepSeek',
+    icon: '🐋',
     subtitle: 'DeepSeek Harness',
     probe: path.join(HOME, '.dsh', 'sessions'),
     ready: true,

@@ -14,15 +14,8 @@
 <!-- changed-files:start -->
 ### 本次提交修改的文件
 
-- .gitattributes
-- .githooks/pre-commit
 - src/cards.mjs
-- src/core/codex.mjs
-- src/core/conversation.mjs
-- src/core/conversation.test.mjs
-- src/core/dsh.mjs
-- src/core/normalize.mjs
 - src/index.mjs
+- src/platforms.mjs
 - tools/cards-smoke.mjs
-- tools/update-docs.mjs
 <!-- changed-files:end -->
