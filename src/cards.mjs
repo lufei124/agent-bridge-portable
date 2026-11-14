@@ -75,31 +75,17 @@ function compactFooter(buttons, trailingButton) {
   return { ...controls, horizontal_spacing: '4px' };
 }
 
-/**
- * 消息翻页。
- *
- * 飞书卡片没有滚动容器（JSON 2.0 的组件只能纵向流式排列，交互容器也不滚动），
- * 一页内按时间正序，从最新一页开始，可翻到更早的记录。
- */
-const pager = (hasOlder, hasNewer, sessionId) => ({
-  tag: 'column_set',
-  flex_mode: 'none',
-  margin: '2px 0px 0px 0px',
-  columns: [
-    ...(hasOlder
-      ? [
-          { tag: 'column', width: 'auto', elements: [btn('最早', { a: 'mfirst', s: sessionId })] },
-          { tag: 'column', width: 'auto', elements: [btn('更早', { a: 'mprev', s: sessionId })] },
-        ]
-      : []),
-    ...(hasNewer
-      ? [
-          { tag: 'column', width: 'auto', elements: [btn('后一页', { a: 'mnext', s: sessionId })] },
-          { tag: 'column', width: 'auto', elements: [btn('回到最新', { a: 'mlatest', s: sessionId })] },
-        ]
-      : []),
-  ],
-});
+function pageButtons(page, pages, pageValue) {
+  if (pages <= 1) return [];
+  const buttons = [];
+  if (page > 0) buttons.push(btn('上一页', pageValue(page - 1)));
+  const first = Math.max(0, Math.min(page - 1, pages - 3));
+  for (let i = first; i < Math.min(pages, first + 3); i++) {
+    buttons.push(btn(String(i + 1), pageValue(i), i === page ? 'primary' : 'default'));
+  }
+  if (page < pages - 1) buttons.push(btn('下一页', pageValue(page + 1), 'primary'));
+  return buttons;
+}
 
 // ------------------------------------------------------------ 第 1 层：平台
 
@@ -204,18 +190,9 @@ export function sessionListCard({
   elements.push(hr());
   if (pages > 1) elements.push(md(`第 **${page + 1} / ${pages}** 页 · 共 ${total} 个会话`));
 
-  const nav = [];
   const pageValue = (index) => unified
     ? { a: 'home', page: index, f: filter }
     : { a: 'src', p: platformId, page: index };
-  if (pages > 1) {
-    if (page > 0) nav.push(btn('上一页', pageValue(page - 1)));
-    const first = Math.max(0, Math.min(page - 1, pages - 3));
-    for (let i = first; i < Math.min(pages, first + 3); i++) {
-      nav.push(btn(String(i + 1), pageValue(i), i === page ? 'primary' : 'default'));
-    }
-    if (page < pages - 1) nav.push(btn('下一页', pageValue(page + 1), 'primary'));
-  }
 
   const actions = [];
   if (items.some((i) => i.unread)) {
@@ -225,7 +202,7 @@ export function sessionListCard({
   }
   if (!unified) actions.push(btn('返回平台', { a: 'home' }));
   if (actions.length) elements.push(footer(actions));
-  elements.push(compactFooter(nav, btn('刷新', pageValue(page))));
+  elements.push(compactFooter(pageButtons(page, pages, pageValue), btn('刷新', pageValue(page))));
 
   // header.title 是 plain_text，不能做 markdown 转义，否则会显示成反斜杠
   return card(
@@ -298,9 +275,8 @@ export function sessionCard({
   progress = null,
   stopped = '',
   hint = '',
-  hasOlder = false,
-  hasNewer = false,
-  pageText = '',
+  page = 0,
+  pages = 1,
   thinkingOff = false,
   tone = '',
   quickReplies = [],
@@ -363,7 +339,10 @@ export function sessionCard({
           ...messageElements(message, assistantName, sessionId, expandedMessage),
         ])
       : [md('_还没有对话记录_')]),
-    ...(hasOlder || hasNewer ? [md(pageText || ''), pager(hasOlder, hasNewer, sessionId)] : []),
+    ...(pages > 1 ? [
+      md(`第 **${page + 1} / ${pages}** 页`),
+      compactFooter(pageButtons(page, pages, (index) => ({ a: 'messagePage', s: sessionId, page: index }))),
+    ] : []),
     ...(running
       ? [
           {

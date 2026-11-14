@@ -21,6 +21,6 @@ test('preserves all characters and keeps each expanded segment bounded', () => {
   const text = '一行🟢\n引用 "\\路径"\n'.repeat(1500);
   const segments = messageTextPages(text);
   assert.ok(segments.length > 1);
-  assert.ok(segments.every((part) => Buffer.byteLength(JSON.stringify(part)) <= 7502));
+  assert.ok(segments.every((part) => Buffer.byteLength(JSON.stringify(JSON.stringify(part))) <= 5006));
   assert.equal(segments.join(''), text);
 });

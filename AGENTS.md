@@ -17,5 +17,6 @@
 - src/cards.mjs
 - src/core/conversation.mjs
 - src/core/conversation.test.mjs
+- src/index.mjs
 - tools/cards-smoke.mjs
 <!-- changed-files:end -->

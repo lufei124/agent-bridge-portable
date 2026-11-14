@@ -189,14 +189,20 @@ async function handleCardAction(payload) {
     case 'takeover':
       return takeoverFromBusy(chatId, value.t);
 
+    case 'messagePage':
+      if (!Number.isSafeInteger(value.page) || value.page < 0) {
+        return { toast: { type: 'info', content: '页码无效，请刷新后再试' } };
+      }
+      return pageMessages(chatId, value.page, value.s);
+
     case 'mprev':
-      return pageMessages(chatId, 1, value.s);
+      return pageMessages(chatId, msgPageOf(chatId) + 1, value.s);
 
     case 'mnext':
-      return pageMessages(chatId, -1, value.s);
+      return pageMessages(chatId, msgPageOf(chatId) - 1, value.s);
 
     case 'mlatest':
-      return pageMessages(chatId, -Infinity, value.s);
+      return pageMessages(chatId, 0, value.s);
 
     case 'messageText':
       return toggleMessageText(chatId, value);
@@ -329,13 +335,12 @@ async function toggleThinking(chatId) {
   return { card: raw(renderSession(session, chatId)) };
 }
 
-/** 消息翻页：卡片没有滚动容器，用「更早 / 回到最新」代替 */
-async function pageMessages(chatId, delta, sessionId) {
+function pageMessages(chatId, page, sessionId) {
   const view = state.views[chatId];
   const session = findSession(view?.s) || boundSession(chatId);
   if (!session || (sessionId && sessionId !== session.id)) return { toast: { type: 'error', content: '请重新打开会话' } };
 
-  const next = Math.max(0, Math.min(maxMsgPage(session), msgPageOf(chatId) + delta));
+  const next = Math.max(0, Math.min(maxMsgPage(session), page));
   msgPages.set(chatId, next);
   expandedMessages.delete(chatId);
   return { card: raw(renderSession(session, chatId)) };
@@ -1857,9 +1862,8 @@ function renderSession(session, chatId) {
     progress,
     stopped: busy ? '' : lastPartial.get(session.id) || '',
     hint,
-    hasOlder: page < maxPage,
-    hasNewer: page > 0,
-    pageText: `第 **${page + 1} / ${maxPage + 1}** 页`,
+    page,
+    pages: maxPage + 1,
     thinkingOff,
     // 状态色：电脑端占着=橙，运行中=绿，空闲=蓝
     tone: owner ? 'orange' : busy ? 'green' : 'blue',

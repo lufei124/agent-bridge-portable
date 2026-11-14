@@ -202,11 +202,12 @@ check(
 check('busyChoiceCard', busyChoiceCard({ title: '修复构建脚本', excerpt: '先跑一下测试', token: 't-123' }));
 
 const chatMessages = Array.from({ length: 20 }, (_, index) => ({
-  id: String(index), kind: index % 2 ? 'assistant' : 'user',
+  id: index.toString(16).padStart(16, '0'), kind: index % 2 ? 'assistant' : 'user',
   text: '这行在预览中\n第二行\n' + '长正文'.repeat(3000) + '末尾',
 }));
-const detail = { title: '对话分页', platformName: 'Codex', platformId: 'codex', sessionId: 'session-1',
-  hasOlder: true, hasNewer: true, pageText: '第 2 / 3 页', messages: chatMessages,
+const detail = { title: '对话分页', platformName: 'Codex', platformId: 'codex',
+  sessionId: 'session-00000000-0000-4000-8000-000000000001',
+  page: 1, pages: 3, messages: chatMessages,
   quickReplies: ['继续', '跑一下测试', '看下状态'],
 };
 const compact = sessionCard(detail);
@@ -214,8 +215,9 @@ check('sessionCard(10 轮预览)', compact);
 assert(collectButtonText(compact).filter((text) => text === '展开').length === 20, '10 轮应有 20 条可展开消息');
 assert(compact.body.elements.filter((el) => el.tag === 'hr').length === 21, '每两条消息之间都应有横线');
 assert(!JSON.stringify(compact).includes('末尾'));
-for (const label of ['更早', '后一页', '回到最新']) assert(collectButtonText(compact).includes(label));
-const expanded = sessionCard({ ...detail, expandedMessage: { id: '1', part: 0 } });
+const historyPager = compact.body.elements.find((element) => collectButtonText(element).includes('下一页'));
+assert(collectButtonText(historyPager).join(',') === '上一页,1,2,3,下一页', '会话详情应使用和列表相同的页码');
+const expanded = sessionCard({ ...detail, expandedMessage: { id: chatMessages[1].id, part: 0 } });
 check('sessionCard(展开超长正文)', expanded);
 assert(collectButtonText(expanded).includes('收起'));
 assert(collectButtonText(expanded).includes('下一段'));
@@ -239,6 +241,17 @@ for (const [platformId, platformName, icon] of [
   const controls = preview.body.elements.at(-1);
   assert(controls.flex_mode === 'none' && collectButtonText(controls).join(',') === '刷新,返回列表,解绑,继续,跑一下测试,看下状态',
     `${platformName} 快捷短语和底部操作应放在同一排`);
+  assert(!JSON.stringify(preview).includes('"a":"messagePage"'), `${platformName} 单页会话无需分页按钮`);
+  const firstPage = sessionCard({ ...args, pages: 2 });
+  const firstPager = firstPage.body.elements.find((element) => collectButtonText(element).includes('下一页'));
+  assert(collectButtonText(firstPager).join(',') === '1,2,下一页', `${platformName} 首页应显示数字页码和下一页`);
+  const pageTwo = firstPager?.columns[1]?.elements[0]?.behaviors[0]?.value;
+  assert(pageTwo?.a === 'messagePage' && pageTwo?.s === args.sessionId && pageTwo?.page === 1,
+    `${platformName} 数字页码应跳到同一会话的目标页`);
+  const lastPage = sessionCard({ ...args, page: 1, pages: 2 });
+  const lastPager = lastPage.body.elements.find((element) => collectButtonText(element).includes('上一页'));
+  assert(collectButtonText(lastPager).join(',') === '上一页,1,2' && lastPager?.columns[2]?.elements[0]?.type === 'primary',
+    `${platformName} 最后一页应高亮当前页，并可翻回上一页`);
   const userMessages = sessionCard({ ...args, messages: [
     { id: 'desktop', kind: 'user', from: 'desktop', text: '电脑端消息' },
     { id: 'phone', kind: 'user', from: 'phone', text: '手机端消息' },

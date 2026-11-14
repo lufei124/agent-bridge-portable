@@ -32,8 +32,9 @@ export function messageTextPages(text) {
   let end = 0;
   let size = 0;
   for (const character of text) {
-    const bytes = Buffer.byteLength(JSON.stringify(character)) - 2;
-    if (size + bytes > 7500) {
+    const escaped = JSON.stringify(character).slice(1, -1);
+    const bytes = Buffer.byteLength(JSON.stringify(escaped)) - 2;
+    if (size + bytes > 5000) {
       pages.push(text.slice(start, end));
       start = end;
       size = 0;
