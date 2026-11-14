@@ -381,20 +381,6 @@ export function sessionCard({
           ]
         : []),
     ...(hint ? [hr(), md(`💡 ${escapeMarkdown(hint)}`)] : []),
-    ...(quickReplies.length
-      ? [
-          {
-            tag: 'column_set',
-            flex_mode: 'none',
-            margin: '6px 0px 0px 0px',
-            columns: quickReplies.map((q) => ({
-              tag: 'column',
-              width: 'auto',
-              elements: [btn(q, { a: 'quick', q })],
-            })),
-          },
-        ]
-      : []),
     hr(),
     // 卡片里不再放输入框：卡片每秒重建一次，输入框会被清空。
     // 发送统一走聊天框——它固定在底部，卡片怎么刷新都不受影响。
@@ -427,6 +413,7 @@ export function sessionCard({
       btn('返回列表', { a: 'home' }),
       btn('解绑', { a: 'closeAsk' }),
     ]),
+    ...(quickReplies.length ? [footer(quickReplies.map((q) => btn(q, { a: 'quick', q })))] : []),
   ];
 
   const titleText = title.length > 20 ? `${title.slice(0, 20)}…` : title;

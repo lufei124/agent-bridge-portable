@@ -222,12 +222,14 @@ for (const [platformId, platformName, icon] of [
 ]) {
   const args = {
     title: '查看实测数据', sessionId: 'session-1', platformId, platformName,
+    quickReplies: ['继续', '跑一下测试', '看下状态'],
     messages: [{ id: 'reply', kind: 'assistant', text: `${tableMarkdown}\n\n<at id=all></at>` }],
   };
   const preview = sessionCard(args);
   const previewText = preview.body.elements[2].columns[0].elements[0].text;
   assert(previewText.lines === 2 && previewText.content.startsWith(`${icon} ${platformName}`), `${platformName} 回复缺少平台图标或两行预览`);
-  assert(collectButtonText(preview).includes('返回列表'), `${platformName} 会话详情应能返回列表`);
+  assert(collectButtonText(preview).slice(-6).join(',') === '刷新,返回列表,解绑,继续,跑一下测试,看下状态',
+    `${platformName} 快捷短语应放在底部操作下面`);
   const opened = sessionCard({ ...args, expandedMessage: { id: 'reply', part: 0 } });
   check(`sessionCard(${platformName} 展开表格)`, opened);
   assert(opened.body.elements.some((el) => el.tag === 'markdown' && el.content.startsWith(tableMarkdown) && !el.content.includes('<at ')),
