@@ -63,6 +63,9 @@ function walk(node, pathStr) {
     if (node.tag === 'plain_text' && typeof node.content !== 'string') {
       problems.push(`${pathStr}: plain_text 缺少 content`);
     }
+    if (node.tag === 'collapsible_panel' && /\s/.test(node.header?.padding ?? '')) {
+      problems.push(`${pathStr}: 折叠面板标题使用已验证的单值 padding`);
+    }
   }
 
   for (const [key, value] of Object.entries(node)) {
@@ -228,12 +231,20 @@ assert(Buffer.byteLength(JSON.stringify({ content: JSON.stringify(expanded) })) 
 const crowded = sessionCard({ ...detail, messages: chatMessages.map((message) => ({
   ...message, text: message.text.slice(0, 1000),
 })) });
+check('sessionCard(混合展开方式)', crowded);
 const inlinePanels = crowded.body.elements.filter((el) => el.tag === 'collapsible_panel' && el.header.title.content !== '命令与用法');
 assert(inlinePanels.length > 0 && collectButtonText(crowded).includes('展开'), '正文较多时应同时支持原生折叠和按需展开');
 assert(Buffer.byteLength(JSON.stringify({ content: JSON.stringify(crowded) })) < 30_000,
   '折叠正文也应计入飞书请求体大小限制');
 
 const tableMarkdown = '## 实测数据\n\n| 项目 | 数值 |\n| --- | --- |\n| 主库 | **1.47 GB** |';
+const manyTables = sessionCard({ ...detail, messages: Array.from({ length: 6 }, (_, i) => ({
+  id: String(i), kind: 'assistant', text: tableMarkdown,
+})) });
+assert(manyTables.body.elements.filter((element) => element.tag === 'collapsible_panel' && element.elements.some(
+  (child) => child.content === tableMarkdown,
+)).length === 4 && collectButtonText(manyTables).filter((label) => label === '展开').length === 2,
+'同一卡片的表格需要计入总量，超出部分通过展开按需载入');
 const latestReply = '已修复报错，更新代码和配置，测试通过并完成部署。';
 const suggestions = replySuggestions(latestReply);
 assert(suggestions.length === 3 && new Set(suggestions.map((item) => item.label)).size === 3,
@@ -254,6 +265,7 @@ for (const [platformId, platformName, icon] of [
     messages: [{ id: 'reply', kind: 'assistant', text: `${tableMarkdown}\n\n<at id=all></at>` }],
   };
   const preview = sessionCard(args);
+  check(`sessionCard(${platformName} 原生折叠)`, preview);
   const panel = preview.body.elements[2];
   const previewText = panel.header.title;
   assert(panel.tag === 'collapsible_panel' && !panel.expanded && !collectButtonText(panel).length,
@@ -282,6 +294,7 @@ for (const [platformId, platformName, icon] of [
     { id: 'desktop', kind: 'user', from: 'desktop', text: '电脑端消息', images: ['img_test'] },
     { id: 'phone', kind: 'user', from: 'phone', text: '手机端消息' },
   ] });
+  check(`sessionCard(${platformName} 用户消息折叠)`, userMessages);
   const [desktopIcon, desktopPanel] = userMessages.body.elements[2].columns.map((col) => col.elements[0]);
   assert(desktopIcon.content === ':Typing:' && desktopPanel.header.title.lines === 2 && desktopPanel.header.title.content.startsWith('你'),
     `${platformName} 的电脑端用户消息应显示敲键盘表情和两行预览`);

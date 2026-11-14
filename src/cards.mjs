@@ -1,5 +1,5 @@
 import { findPlatform, sessionFilterName } from './platforms.mjs';
-import { messageTextPages } from './core/conversation.mjs';
+import { markdownTableStarts, MARKDOWN_TABLE_LIMIT, messageTextPages } from './core/conversation.mjs';
 
 /**
  * 飞书卡片 JSON 2.0 构建。
@@ -225,7 +225,7 @@ function collapsiblePanel(title, elements) {
     padding: '0px',
     header: {
       title,
-      padding: '2px 0px',
+      padding: '2px',
       icon: { tag: 'standard_icon', token: 'down-small-ccm_outlined', size: '16px 16px' },
       icon_position: 'right',
     },
@@ -272,10 +272,11 @@ function messageElements(message, assistantName, sessionId, expandedMessage, nat
     if (body.trim() || images.length) {
       const panel = collapsiblePanel({ tag: 'plain_text', content: summary, lines: 2 },
         [...images, ...(body.trim() ? [md(body)] : [])]);
-      nativePanels.set(header, desktopUser ? {
+      const element = desktopUser ? {
         ...header,
         columns: [typingIcon, { tag: 'column', width: 'weighted', weight: 1, elements: [panel] }],
-      } : panel);
+      } : panel;
+      nativePanels.set(header, { element, tables: markdownTableStarts(body).length });
     }
     return [header];
   }
@@ -442,13 +443,17 @@ export function sessionCard({
   );
   // The collapsed bodies count against the same 30 KB request limit as visible content.
   let available = DETAIL_CARD_BUDGET - encodedBytes(result);
+  let tablesRemaining = MARKDOWN_TABLE_LIMIT - elements.reduce(
+    (count, element) => count + (element.tag === 'markdown' ? markdownTableStarts(element.content).length : 0), 0,
+  );
   for (let i = elements.length - 1; i >= 0; i--) {
     const panel = nativePanels.get(elements[i]);
     if (!panel) continue;
-    const additional = encodedBytes(panel) - encodedBytes(elements[i]);
-    if (additional <= available) {
-      elements[i] = panel;
+    const additional = encodedBytes(panel.element) - encodedBytes(elements[i]);
+    if (additional <= available && panel.tables <= tablesRemaining) {
+      elements[i] = panel.element;
       available -= additional;
+      tablesRemaining -= panel.tables;
     }
   }
   return result;

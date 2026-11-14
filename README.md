@@ -109,6 +109,8 @@ Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。�
 
 最新一页会根据助手刚完成的回复显示最多三个追问建议，与「刷新」「返回列表」同排。桥接在本机根据回复主题挑选建议，同一条回复用固定结果。点建议才会发出对应的追问。在聊天框发送 `/close` 可解除当前飞书聊天和本机会话的关联。
 
+原生折叠面板里的表格也计入单张卡片的限制，表格较多时可通过「展开」按需载入和分段阅读。飞书拒绝更新卡片时，可在 `data/bridge.log` 查看具体的校验错误。
+
 ## 已知限制
 
 - 一个回合内的消息不逐条推送，只在 `end_turn` 时推一条摘要。
@@ -133,11 +135,8 @@ Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。�
 <!-- changed-files:start -->
 ### 本次提交修改的文件
 
-- .env.example
-- AGENT-INSTALL.md
 - src/cards.mjs
-- src/core/suggestions.mjs
-- src/index.mjs
+- src/core/conversation.mjs
+- src/core/conversation.test.mjs
 - tools/cards-smoke.mjs
-- tools/setup-win.mjs
 <!-- changed-files:end -->

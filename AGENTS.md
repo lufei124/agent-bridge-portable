@@ -14,11 +14,8 @@
 <!-- changed-files:start -->
 ### 本次提交修改的文件
 
-- .env.example
-- AGENT-INSTALL.md
 - src/cards.mjs
-- src/core/suggestions.mjs
-- src/index.mjs
+- src/core/conversation.mjs
+- src/core/conversation.test.mjs
 - tools/cards-smoke.mjs
-- tools/setup-win.mjs
 <!-- changed-files:end -->
