@@ -15,10 +15,10 @@ import { CodexStore } from './core/codex.mjs';
 import { DshStore } from './core/dsh.mjs';
 import { conversationBrief, usefulProject } from './core/brief.mjs';
 import { conversationPage, conversationTurns, TURNS_PER_PAGE } from './core/conversation.mjs';
-import { replySuggestions } from './core/suggestions.mjs';
+import { SessionSuggestions, suggestionContext } from './core/suggestions.mjs';
 import { explainFailure } from './core/failure.mjs';
 import { FeishuChannel } from './channels/feishu.mjs';
-import { runFresh, runSession } from './core/runner.mjs';
+import { generateFollowUps, runFresh, runSession } from './core/runner.mjs';
 import { findOwners, invalidateCache } from './core/patrol.mjs';
 import {
   PAGE_SIZE,
@@ -95,6 +95,9 @@ const phoneTurns = new Map(); // sessionId -> 手机发起这一轮时的原始�
 const cleanupWarned = new Set(); // chatId -> 群消息撤回失败只提示一次
 const pinWarned = new Set(); // chatId -> 置顶失败只提示一次
 const lastPartial = new Map(); // sessionId -> 被停止时已生成的部分内容
+const sessionSuggestions = new SessionSuggestions(generateFollowUps, (error) => {
+  console.warn('[suggestions]', error.message);
+});
 const BOOT_AT = Date.now();
 let errorCount = 0; // 本次运行期间的失败次数（状态卡用）
 
@@ -1185,10 +1188,11 @@ function startHeartbeat(chatId, sessionId) {
     if (msgPageOf(chatId) > 0) return;
 
     const busy = isBusy(session);
+    const suggestions = suggestionsForSession(session, busy);
     // 只看"会显示出来的东西"：工具事件不进卡片，没必要为它重建整张卡
     const human = session.messages.filter((m) => m.kind !== 'tool');
     const latest = human.at(-1);
-    const contentKey = `${busy}:${human.length}:${latest?.ts || 0}:${String(latest?.text || '').length}:${session.title}:${session.agentPreset || ''}`;
+    const contentKey = `${busy}:${human.length}:${latest?.ts || 0}:${String(latest?.text || '').length}:${session.title}:${session.agentPreset || ''}:${suggestions.map(({ token }) => token).join(',')}`;
     const changed = contentKey !== lastKey;
     // 跑的时候每秒都刷，计时才走得动；
     // 空闲且内容没变就不刷，避免没意义地重建卡片（会抖、会耗电）。
@@ -1196,7 +1200,7 @@ function startHeartbeat(chatId, sessionId) {
 
     lastKey = contentKey;
     channel
-      .patchCard(messageId, renderSession(session, chatId))
+      .patchCard(messageId, renderSession(session, chatId, suggestions))
       .catch((err) => {
         // 每秒刷一次，失败了别把日志刷爆
         if (Date.now() - lastFail < 30_000) return;
@@ -1653,7 +1657,7 @@ async function quickSend(chatId, { s: sessionId, m: replyId, t: token }) {
   if (blocked) return { toast: { type: 'info', content: blocked }, card: raw(renderSession(session, chatId)) };
   if (isBusy(session)) return { toast: { type: 'info', content: '当前会话还在运行，请等回复完成' } };
 
-  const suggestion = replySuggestions(turns).find((item) => item.token === token);
+  const suggestion = sessionSuggestions.read(session.id, suggestionContext(turns)).find((item) => item.token === token);
   if (!suggestion) return { toast: { type: 'info', content: '建议已更新，请刷新会话' } };
 
   return submitFromCard(chatId, session.id, suggestion.text);
@@ -1808,7 +1812,14 @@ function clampPage(value, pages) {
   return Math.min(Math.floor(n), pages - 1);
 }
 
-function renderSession(session, chatId) {
+function suggestionsForSession(session, busy, turns = conversationTurns(session.messages)) {
+  if (busy || readOnlyReason(session)) return [];
+  const context = suggestionContext(turns);
+  sessionSuggestions.request(session.id, context);
+  return sessionSuggestions.read(session.id, context);
+}
+
+function renderSession(session, chatId, suggestions) {
   const now = Date.now();
   const platformId = platformOf(session);
   const startedAt = runStartedAt.get(session.id);
@@ -1858,7 +1869,7 @@ function renderSession(session, chatId) {
     thinkingOff,
     // 状态色：电脑端占着=橙，运行中=绿，空闲=蓝
     tone: owner ? 'orange' : busy ? 'green' : 'blue',
-    suggestions: !readOnly && !busy && page === 0 ? replySuggestions(turns) : [],
+    suggestions: page === 0 ? suggestions ?? suggestionsForSession(session, busy, turns) : [],
     sessionId: session.id,
     platformId,
     readOnly,

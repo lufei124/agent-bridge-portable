@@ -291,7 +291,30 @@ function runClaude({ args: baseArgs, cwd, prompt, timeoutMs = 15 * 60 * 1000, on
   return spawnCapture({ command: resolveClaudeBin(), args, cwd, timeoutMs, onSpawn, onEvent });
 }
 
-function spawnCapture({ command, args, cwd, timeoutMs = 15 * 60 * 1000, onSpawn, onEvent }) {
+export async function generateFollowUps(prompt) {
+  let answer = '';
+  const { code, timedOut } = await spawnCapture({
+    command: resolveCodexBin(),
+    cwd: os.tmpdir(),
+    args: [
+      '-a', 'never', 'exec', '--ephemeral', '--ignore-user-config',
+      '--skip-git-repo-check', '--sandbox', 'read-only', '--disable', 'shell_tool',
+      '--disable', 'shell_snapshot', '--disable', 'plugins', '--disable', 'multi_agent_v2',
+      '-c', 'web_search="disabled"', '-c', 'mcp_servers={}', '-c', 'project_doc_max_bytes=0',
+      '-c', 'model_reasoning_effort="low"', '--json', '-',
+    ],
+    stdin: prompt,
+    timeoutMs: 30_000,
+    onEvent(event) {
+      if (event.type === 'item.completed' && event.item?.type === 'agent_message') answer = event.item.text;
+    },
+  });
+  if (timedOut) throw new Error('模型请求超时');
+  if (code !== 0 || !answer) throw new Error('Codex 未返回追问，请检查本机 Codex 登录状态');
+  return answer;
+}
+
+function spawnCapture({ command, args, cwd, stdin, timeoutMs = 15 * 60 * 1000, onSpawn, onEvent }) {
   return new Promise((resolve) => {
     let child;
     try {
@@ -300,7 +323,7 @@ function spawnCapture({ command, args, cwd, timeoutMs = 15 * 60 * 1000, onSpawn,
         windowsHide: true,
         env: process.env,
         // 不关 stdin 的话，CLI 会等 3 秒才继续
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: [stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       });
     } catch (err) {
       resolve({ code: -1, stdout: '', stderr: String(err?.message || err), timedOut: false });
@@ -353,6 +376,10 @@ function spawnCapture({ command, args, cwd, timeoutMs = 15 * 60 * 1000, onSpawn,
       clearTimeout(timer);
       resolve({ code: -1, stdout, stderr: String(err?.message || err), timedOut });
     });
+    if (child.stdin) {
+      child.stdin.on('error', () => {}); // The process may exit before reading its input.
+      child.stdin.end(stdin, 'utf8');
+    }
 
     child.on('close', (code) => {
       clearTimeout(timer);
