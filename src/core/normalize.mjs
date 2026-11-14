@@ -12,7 +12,6 @@
  *   { kind: 'turn_end', ts, sessionId, cwd }
  */
 
-const MAX_TEXT = 4000;
 const MAX_TOOL_SUMMARY = 160;
 
 export function normalize(rec) {
@@ -48,7 +47,7 @@ function fromMessage(rec, meta) {
   const content = msg.content;
   if (typeof content === 'string') {
     if (!content.trim()) return [];
-    return [{ kind: rec.type, text: clip(content.trim()), ...meta, stopReason: msg.stop_reason }];
+    return [{ kind: rec.type, text: content.trim(), ...meta, stopReason: msg.stop_reason }];
   }
   if (!Array.isArray(content)) return [];
 
@@ -73,7 +72,7 @@ function fromMessage(rec, meta) {
   if (texts.length) {
     out.unshift({
       kind: rec.type,
-      text: clip(texts.join('\n\n')),
+      text: texts.join('\n\n'),
       ...meta,
       stopReason: msg.stop_reason,
     });
@@ -94,6 +93,6 @@ function summarizeToolInput(input) {
   return clip(candidate.replace(/\s+/g, ' '), MAX_TOOL_SUMMARY);
 }
 
-function clip(text, max = MAX_TEXT) {
+function clip(text, max) {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }

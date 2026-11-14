@@ -11,7 +11,6 @@ import os from 'node:os';
 import zlib from 'node:zlib';
 import { conversationBrief } from './brief.mjs';
 
-const MAX_TEXT = 4000;
 const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
 
 export const DEFAULT_DSH_DIR = path.join(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'), 'sessions');
@@ -129,14 +128,14 @@ function applyRecord(parsed, record) {
   if (record.type === 'user/message') {
     const text = blockText(data.content, 'text');
     if (!text) return;
-    parsed.messages.push({ kind: 'user', text: clip(text), ts, sessionId: parsed.id, cwd: parsed.cwd });
+    parsed.messages.push({ kind: 'user', text, ts, sessionId: parsed.id, cwd: parsed.cwd });
     return;
   }
 
   if (record.type === 'assistant/message') {
     const text = blockText(data.message?.content, 'text');
     if (!text) return;
-    parsed.messages.push({ kind: 'assistant', text: clip(text), ts, sessionId: parsed.id, cwd: parsed.cwd });
+    parsed.messages.push({ kind: 'assistant', text, ts, sessionId: parsed.id, cwd: parsed.cwd });
   }
 }
 
@@ -149,10 +148,6 @@ function blockText(content, type) {
     parts.push(String(block.text).trim());
   }
   return parts.join('\n\n').trim();
-}
-
-function clip(text, max = MAX_TEXT) {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 function zstdFrameEnd(buffer, start) {

@@ -12,7 +12,6 @@ import path from 'node:path';
 import os from 'node:os';
 import { conversationBrief } from './brief.mjs';
 
-const MAX_TEXT = 4000;
 const HEAD_BYTES = 64 * 1024;
 const TAIL_BYTES = 512 * 1024;
 
@@ -92,7 +91,7 @@ function applyRecord(parsed, record) {
 
   parsed.messages.push({
     kind: payload.role,
-    text: clip(text),
+    text,
     ts,
     sessionId: parsed.id,
     cwd: parsed.cwd,
@@ -110,10 +109,6 @@ function messageText(content) {
     }
   }
   return parts.join('\n\n').trim();
-}
-
-function clip(text, max = MAX_TEXT) {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 export class CodexStore {

@@ -1,0 +1,5 @@
+#!/bin/sh
+if [ -x ./runtime/node.exe ]; then
+  exec ./runtime/node.exe tools/update-docs.mjs
+fi
+exec node tools/update-docs.mjs

@@ -99,6 +99,10 @@ Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。�
 
 如果便携 Node 启动 Harness 时遇到 `EPERM web-profile`，在 Windows 安装系统版 Node 后，`start.cmd` 和 `check.cmd --deepseek` 会优先使用系统版。可通过本地 `.env` 的 `BRIDGE_DSH_NODE` 指定运行 DeepSeek CLI 的 Node 路径。
 
+## 会话详情
+
+点开会话后，从最新一页开始看，每页最多 10 轮。每条消息默认最多显示两行，消息之间用横线分隔。点「展开」查看正文和图片，点「收起」恢复预览。特别长的单条消息可用「上一段 / 下一段」读完。用「更早 / 后一页」翻阅当前已加载的聊天记录。
+
 ## 已知限制
 
 - 一个回合内的消息不逐条推送，只在 `end_turn` 时推一条摘要。
@@ -115,3 +119,23 @@ Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。�
 - M2 通知：回合结束推送 ✅
 - M3 写回：手机消息送进电脑上的会话 ✅
 - M4 多编辑器：Codex、DeepSeek 已能列出并续跑。进程守护（开机自启、崩溃重启）已有 Windows 实现
+
+## 开发和文档维护
+
+新克隆后，运行 `git config core.hooksPath .githooks` 启用文档更新。每次提交代码时，钩子会根据已暂存的改动更新 README 和 [AGENTS.md](AGENTS.md) 的文件清单，并将更新纳入同一次提交。功能和操作说明随代码更新。
+
+<!-- changed-files:start -->
+### 本次提交修改的文件
+
+- .gitattributes
+- .githooks/pre-commit
+- src/cards.mjs
+- src/core/codex.mjs
+- src/core/conversation.mjs
+- src/core/conversation.test.mjs
+- src/core/dsh.mjs
+- src/core/normalize.mjs
+- src/index.mjs
+- tools/cards-smoke.mjs
+- tools/update-docs.mjs
+<!-- changed-files:end -->

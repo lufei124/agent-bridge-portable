@@ -8,12 +8,13 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { TranscriptStore } from './core/transcript.mjs';
 import { CodexStore } from './core/codex.mjs';
 import { DshStore } from './core/dsh.mjs';
 import { conversationBrief, usefulProject } from './core/brief.mjs';
+import { conversationPage, conversationTurns, TURNS_PER_PAGE } from './core/conversation.mjs';
 import { explainFailure } from './core/failure.mjs';
 import { FeishuChannel } from './channels/feishu.mjs';
 import { runFresh, runSession } from './core/runner.mjs';
@@ -189,10 +190,16 @@ async function handleCardAction(payload) {
       return takeoverFromBusy(chatId, value.t);
 
     case 'mprev':
-      return pageMessages(chatId, 1);
+      return pageMessages(chatId, 1, value.s);
 
     case 'mnext':
-      return pageMessages(chatId, -1);
+      return pageMessages(chatId, -1, value.s);
+
+    case 'mlatest':
+      return pageMessages(chatId, -Infinity, value.s);
+
+    case 'messageText':
+      return toggleMessageText(chatId, value);
 
     case 'think':
       return toggleThinking(chatId);
@@ -243,13 +250,8 @@ async function handleCardAction(payload) {
     case 'search':
       return showSearch(chatId, String(form.q || '').trim());
 
-    case 'mfirst': {
-      const view = state.views[chatId];
-      const session = findSession(view?.s) || boundSession(chatId);
-      if (!session) return { toast: { type: 'error', content: '会话不存在' } };
-      msgPages.set(chatId, maxMsgPage(session));
-      return { card: raw(renderSession(session, chatId)) };
-    }
+    case 'mfirst':
+      return pageMessages(chatId, Infinity, value.s);
 
     case 'resumeLast': {
       const view = state.views[chatId];
@@ -306,6 +308,7 @@ async function openCard(chatId, sessionId) {
   state.views[chatId] = { kind: 'session', s: session.id };
   delete state.unread[session.id]; // 打开即视为已读
   msgPages.set(chatId, 0); // 打开就看最新一页
+  expandedMessages.delete(chatId);
   await saveState();
   // 打开会话就持续盯着：即使现在是空闲的，电脑端下一轮开始时也能及时刷出来
   startHeartbeat(chatId, session.id);
@@ -327,13 +330,28 @@ async function toggleThinking(chatId) {
 }
 
 /** 消息翻页：卡片没有滚动容器，用「更早 / 回到最新」代替 */
-async function pageMessages(chatId, delta) {
+async function pageMessages(chatId, delta, sessionId) {
   const view = state.views[chatId];
   const session = findSession(view?.s) || boundSession(chatId);
-  if (!session) return { toast: { type: 'error', content: '会话不存在' } };
+  if (!session || (sessionId && sessionId !== session.id)) return { toast: { type: 'error', content: '请重新打开会话' } };
 
   const next = Math.max(0, Math.min(maxMsgPage(session), msgPageOf(chatId) + delta));
   msgPages.set(chatId, next);
+  expandedMessages.delete(chatId);
+  return { card: raw(renderSession(session, chatId)) };
+}
+
+function toggleMessageText(chatId, { s: sessionId, m: id, part }) {
+  const session = boundSession(chatId);
+  if (!session || session.id !== sessionId || !Number.isSafeInteger(part) || part < -1) {
+    return { toast: { type: 'info', content: '请重新打开会话' } };
+  }
+  const turns = conversationTurns(session.messages);
+  const page = Math.min(msgPageOf(chatId), maxMsgPage(session, turns));
+  const message = conversationPage(turns, page).find((item) => messageId(item) === id);
+  if (!message) return { card: raw(renderSession(session, chatId)) };
+  if (part === -1) expandedMessages.delete(chatId);
+  else expandedMessages.set(chatId, { sessionId, id, part });
   return { card: raw(renderSession(session, chatId)) };
 }
 
@@ -750,6 +768,7 @@ async function handleIncomingInner({ chatId, text, openId, messageId, media, cha
     state.views[chatId] = { kind: 'session', s: session.id };
     delete state.unread[session.id];
     msgPages.set(chatId, 0);
+    expandedMessages.delete(chatId);
     await saveState();
     startHeartbeat(chatId, session.id);
     return sendConsoleCard(chatId, renderSession(session, chatId));
@@ -1133,9 +1152,8 @@ function enqueue(sessionId, text, chatId) {
 
 // 运行中每秒刷新一次：计时按秒走，新内容最多 1 秒内出现
 const PROGRESS_MS = 1000;
-// 卡片上没有滚动容器，消息用翻页代替，一页固定条数
-const MSG_PAGE = 6;
 const msgPages = new Map(); // chatId -> 页码（0 = 最新一页）
+const expandedMessages = new Map(); // chatId -> 当前展开的消息和正文段落
 
 /**
  * 运行期间每秒刷新详情卡：计时按秒走，流式文字也跟着上屏。
@@ -1246,7 +1264,7 @@ async function notifyTurnEnd(session) {
   if (!page) return;
 
   let card = null;
-  if (viewingThisOne) card = renderSession(session, chatId);
+  if (viewingThisOne && msgPageOf(chatId) === 0) card = renderSession(session, chatId);
   else if (current.kind === 'home') card = homeCard(current.page, current.f || filterOf(chatId));
   else if (current.kind === 'list') card = sessionListCardFor(current.p, current.page);
 
@@ -1799,7 +1817,8 @@ function renderSession(session, chatId) {
   const platformId = platformOf(session);
   const startedAt = runStartedAt.get(session.id);
   const busy = isBusy(session);
-  const maxPage = maxMsgPage(session);
+  const turns = conversationTurns(session.messages);
+  const maxPage = maxMsgPage(session, turns);
   const page = Math.min(chatId ? msgPageOf(chatId) : 0, maxPage);
   const thinkingOff = Boolean(chatId && state.thinkingOff?.[chatId]);
 
@@ -1818,9 +1837,10 @@ function renderSession(session, chatId) {
       : '';
 
   // 进度从消息流里拆出来，放到卡片顶部
-  const rendered = renderMessages(session, busy, startedAt, page, !thinkingOff);
+  const rendered = renderMessages(session, turns, busy, startedAt, page, !thinkingOff);
   const progress = rendered.find((m) => m.kind === 'pending') || null;
   const visible = rendered.filter((m) => m.kind !== 'pending');
+  const expanded = expandedMessages.get(chatId);
 
   // 最近 3 个其它会话，一点直达，省掉"返回列表→翻页→查看"
   const recents = sessionsOf(platformId)
@@ -1840,6 +1860,7 @@ function renderSession(session, chatId) {
     queued: state.queues[session.id]?.length || 0,
     running: busy,
     messages: visible,
+    expandedMessage: expanded?.sessionId === session.id ? expanded : null,
     progress,
     stopped: busy ? '' : lastPartial.get(session.id) || '',
     recents,
@@ -1857,26 +1878,16 @@ function renderSession(session, chatId) {
   });
 }
 
-/** 只算给人看的消息（工具调用不上卡片） */
-function humanMessages(session) {
-  return session.messages.filter((m) => m.kind !== 'tool');
-}
-
 function msgPageOf(chatId) {
   return Math.max(0, msgPages.get(chatId) || 0);
 }
 
-function maxMsgPage(session) {
-  const human = humanMessages(session);
-  let lastUser = -1;
-  for (let i = human.length - 1; i >= 0; i--) {
-    if (human[i].kind === 'user') {
-      lastUser = i;
-      break;
-    }
-  }
-  // 最新一页已经包含"本轮 + 上一条"，剩下的部分才需要翻页
-  return Math.max(0, Math.ceil(Math.max(0, lastUser - 1) / MSG_PAGE));
+function maxMsgPage(session, turns = conversationTurns(session.messages)) {
+  return Math.max(0, Math.ceil(turns.length / TURNS_PER_PAGE) - 1);
+}
+
+function messageId(message) {
+  return createHash('sha256').update(JSON.stringify([message.kind, message.ts, message.text, message.occurrence])).digest('hex').slice(0, 16);
 }
 
 /**
@@ -1885,45 +1896,14 @@ function maxMsgPage(session) {
  * 工具调用/命令不再上卡片——那是日志，不是对话。手机上留下的只有
  * 「你说的话」和「Claude 说的话」，包括它中途的说明。
  */
-function renderMessages(session, busy, startedAt, page = 0, showThinking = true) {
-  const human = humanMessages(session);
-  let lastUser = -1;
-  for (let i = human.length - 1; i >= 0; i--) {
-    if (human[i].kind === 'user') {
-      lastUser = i;
-      break;
-    }
-  }
-
-  let start;
-  let end;
-  if (page === 0) {
-    // 最新一页 = 本轮的全部内容（从最后一条 user 开始）+ 上一条做上下文。
-    // 一轮回答在 transcript 里可能是好几条 assistant 记录，按条数切会拦腰截断。
-    start = Math.max(0, lastUser - 1);
-    end = human.length;
-  } else {
-    const tailEnd = Math.max(0, lastUser - 1);
-    end = Math.max(0, tailEnd - (page - 1) * MSG_PAGE);
-    start = Math.max(0, end - MSG_PAGE);
-  }
-
-  const tail = human.slice(start, Math.max(start, end));
-
-  // 最新一页的 Claude 回复整段展示，不截断——手机上要能读完
-  let lastReplyIndex = -1;
-  tail.forEach((m, i) => {
-    if (m.kind === 'assistant') lastReplyIndex = i;
-  });
-
-  const out = tail.map((m, i) => {
+function renderMessages(session, turns, busy, startedAt, page, showThinking) {
+  const out = conversationPage(turns, page).map((m) => {
     const fromPhone = m.kind === 'user' && sentFromPhone(session, m.text);
-    const isLastAssistant = page === 0 && i === lastReplyIndex;
     return {
+      id: messageId(m),
       kind: m.kind,
       from: m.kind === 'user' ? (fromPhone ? 'phone' : 'desktop') : '',
-      text: isLastAssistant ? clipText(displayText(m.text), 4000) : clipText(displayText(m.text), 300),
-      block: isLastAssistant,
+      text: m.parts.map(displayText).join('\n\n'),
       images: m.kind === 'user' ? imageKeysForText(m.text) : [],
       time: hhmm(m.ts),
     };

@@ -1,4 +1,5 @@
 import { sessionFilterName } from './platforms.mjs';
+import { messageTextPages } from './core/conversation.mjs';
 
 /**
  * 飞书卡片 JSON 2.0 构建。
@@ -66,21 +67,24 @@ const footer = (buttons) => ({
  * 消息翻页。
  *
  * 飞书卡片没有滚动容器（JSON 2.0 的组件只能纵向流式排列，交互容器也不滚动），
- * 所以"滑动列表"只能用翻页替代：一页固定几条，旧的在前面、新的在最后一页。
+ * 一页内按时间正序，从最新一页开始，可翻到更早的记录。
  */
-const pager = (hasOlder, hasNewer) => ({
+const pager = (hasOlder, hasNewer, sessionId) => ({
   tag: 'column_set',
   flex_mode: 'none',
   margin: '2px 0px 0px 0px',
   columns: [
     ...(hasOlder
       ? [
-          { tag: 'column', width: 'auto', elements: [btn('最早', { a: 'mfirst' })] },
-          { tag: 'column', width: 'auto', elements: [btn('更早', { a: 'mprev' })] },
+          { tag: 'column', width: 'auto', elements: [btn('最早', { a: 'mfirst', s: sessionId })] },
+          { tag: 'column', width: 'auto', elements: [btn('更早', { a: 'mprev', s: sessionId })] },
         ]
       : []),
     ...(hasNewer
-      ? [{ tag: 'column', width: 'auto', elements: [btn('回到最新', { a: 'mnext' }, 'primary')] }]
+      ? [
+          { tag: 'column', width: 'auto', elements: [btn('后一页', { a: 'mnext', s: sessionId })] },
+          { tag: 'column', width: 'auto', elements: [btn('回到最新', { a: 'mlatest', s: sessionId })] },
+        ]
       : []),
   ],
 });
@@ -226,6 +230,43 @@ export function sessionListCard({
 
 // ------------------------------------------------------------ 第 3 层：会话详情
 
+function messageElements(message, assistantName, sessionId, expandedMessage) {
+  if (typeof message === 'string') return [md(message)];
+  const sender = message.kind === 'assistant' ? assistantName : message.from === 'phone' ? '📱 你' : '🖥 你';
+  const label = [sender, message.time].filter(Boolean).join(' · ');
+  const expanded = expandedMessage?.id === message.id;
+  const action = { a: 'messageText', s: sessionId, m: message.id };
+  const preview = plainText(message.text.slice(0, 140));
+  const text = (content, lines) => ({
+    tag: 'div',
+    text: { tag: 'plain_text', content, ...(lines ? { lines } : {}) },
+  });
+  const header = {
+    tag: 'column_set',
+    flex_mode: 'none',
+    columns: [
+      { tag: 'column', width: 'weighted', weight: 1, elements: [
+        text(expanded ? label : `${label}  ${preview || '📎 附件'}`, expanded ? undefined : 2),
+      ] },
+      { tag: 'column', width: 'auto', elements: [btn(expanded ? '收起' : '展开', { ...action, part: expanded ? -1 : 0 })] },
+    ],
+  };
+  if (!expanded) return [header];
+
+  const parts = messageTextPages(message.text);
+  const part = Math.min(expandedMessage.part, parts.length - 1);
+  const images = (message.images || []).slice(0, 3).map((key) => ({ tag: 'img', img_key: key, preview: true }));
+  const pageButtons = [];
+  if (part > 0) pageButtons.push(btn('上一段', { ...action, part: part - 1 }));
+  if (part < parts.length - 1) pageButtons.push(btn('下一段', { ...action, part: part + 1 }));
+  return [
+    header,
+    ...(part === 0 ? images : []),
+    ...(parts[part] ? [text(parts[part])] : []),
+    ...(pageButtons.length ? [text(`第 ${part + 1} / ${parts.length} 段`), footer(pageButtons)] : []),
+  ];
+}
+
 export function sessionCard({
   title,
   project,
@@ -237,6 +278,7 @@ export function sessionCard({
   running,
   runningFor = '',
   messages,
+  expandedMessage = null,
   progress = null,
   stopped = '',
   recents = [],
@@ -251,34 +293,7 @@ export function sessionCard({
   platformId,
   readOnly = false,
 }) {
-  const assistantName = escapeMarkdown(platformName || 'Claude');
-  const lines = messages.map((m) => {
-    // 兼容旧调用：直接传字符串
-    if (typeof m === 'string') return m;
-    if (m.kind === 'pending') {
-      // 进度只报"活儿干了多久 / 还有没有输出"，不报工具和命令。
-      // 两段都常驻，而且都是固定宽度的 mm:ss，避免每秒刷新时换行导致卡片高度变化。
-      const bits = ['⏳ 工作中'];
-      if (m.elapsed) bits.push(m.elapsed);
-      bits.push(`活动 ${m.idle || '00:00'}`);
-      if (m.steps) bits.push(`第 ${m.steps} 步 ${'●'.repeat(Math.min(m.steps, 5))}`);
-      const head = `**${assistantName}** ${bits.join(' · ')}`;
-      // 流式预览：模型正在写的内容，先看一眼，不用等整段落盘。
-      // 还没开始写正文时，退而显示它正在思考的内容。
-      if (m.preview) return `${head}\n\n${plainText(m.preview)}`;
-      if (m.thinking) return `${head}\n\n🧠 ${plainText(m.thinking)}`;
-      return head;
-    }
-    if (m.kind === 'user') {
-      const badge = m.from === 'phone' ? '📱 你' : '🖥 你';
-      return `**${badge}**${m.time ? ` ${m.time}` : ''}　${plainText(m.text)}`;
-    }
-    // 最新一条回复完整展示（保留段落），旧消息一行概括即可
-    if (m.block) {
-      return `**${assistantName}**${m.time ? ` ${m.time}` : ''} ✅\n\n${stripMarkdown(m.text, true)}`;
-    }
-    return `**${assistantName}**${m.time ? ` ${m.time}` : ''} ✅　${plainText(m.text)}`;
-  });
+  const assistantName = platformName || 'Claude';
 
   // 头部压成一行：持有者 · 已跑时长 · 最后活跃 · 排队
   const metaLine = [
@@ -298,7 +313,7 @@ export function sessionCard({
     if (progress.elapsed) bits.push(progress.elapsed);
     bits.push(`活动 ${progress.idle || '00:00'}`);
     if (progress.steps) bits.push(`第 ${progress.steps} 步 ${'●'.repeat(Math.min(progress.steps, 5))}`);
-    const head = `**${assistantName}** ${bits.join(' · ')}`;
+    const head = `**${escapeMarkdown(assistantName)}** ${bits.join(' · ')}`;
     if (progress.preview) return `${head}\n\n${plainText(progress.preview)}`;
     if (progress.thinking) return `${head}\n\n🧠 ${plainText(progress.thinking)}`;
     return head;
@@ -340,18 +355,13 @@ export function sessionCard({
           },
         ]
       : []),
-    // 轮次之间加一条细分割线：你的话和 Claude 的话一眼分得开
-    ...(lines.length
-      ? messages.flatMap((m, i) => {
-          const kind = typeof m === 'string' ? 'user' : m.kind;
-          const prev = i > 0 ? (typeof messages[i - 1] === 'string' ? 'user' : messages[i - 1].kind) : null;
-          // 带附件的消息：先把图片缩略图铺出来，再显示文字行
-          const images = (m.images || []).slice(0, 3).map((key) => ({ tag: 'img', img_key: key, preview: true }));
-          const els = [...images, md(lines[i])];
-          return prev && prev !== kind ? [hr(), ...els] : els;
-        })
+    ...(messages.length
+      ? messages.flatMap((message, index) => [
+          ...(index ? [hr()] : []),
+          ...messageElements(message, assistantName, sessionId, expandedMessage),
+        ])
       : [md('_还没有对话记录_')]),
-    ...(hasOlder || hasNewer ? [md(pageText || ''), pager(hasOlder, hasNewer)] : []),
+    ...(hasOlder || hasNewer ? [md(pageText || ''), pager(hasOlder, hasNewer, sessionId)] : []),
     ...(running
       ? [
           {

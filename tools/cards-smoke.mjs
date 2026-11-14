@@ -25,6 +25,7 @@ import {
 
 const KNOWN_TAGS = new Set([
   'markdown',
+  'div',
   'hr',
   'column_set',
   'column',
@@ -194,6 +195,24 @@ check(
 );
 
 check('busyChoiceCard', busyChoiceCard({ title: '修复构建脚本', excerpt: '先跑一下测试', token: 't-123' }));
+
+const chatMessages = Array.from({ length: 20 }, (_, index) => ({
+  id: String(index), kind: index % 2 ? 'assistant' : 'user',
+  text: '这行在预览中\n第二行\n' + '长正文'.repeat(3000) + '末尾',
+}));
+const detail = { title: '对话分页', platformName: 'Codex', sessionId: 'session-1',
+  hasOlder: true, hasNewer: true, pageText: '第 2 / 3 页', messages: chatMessages };
+const compact = sessionCard(detail);
+check('sessionCard(10 轮预览)', compact);
+assert(collectButtonText(compact).filter((text) => text === '展开').length === 20, '10 轮应有 20 条可展开消息');
+assert(compact.body.elements.filter((el) => el.tag === 'hr').length === 21, '每两条消息之间都应有横线');
+assert(!JSON.stringify(compact).includes('末尾'));
+for (const label of ['更早', '后一页', '回到最新']) assert(collectButtonText(compact).includes(label));
+const expanded = sessionCard({ ...detail, expandedMessage: { id: '1', part: 0 } });
+check('sessionCard(展开超长正文)', expanded);
+assert(collectButtonText(expanded).includes('收起'));
+assert(collectButtonText(expanded).includes('下一段'));
+assert(Buffer.byteLength(JSON.stringify(expanded)) < 30_000);
 
 const ownerCard = ownerBusyCard({
   title: '修复构建脚本',
