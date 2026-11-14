@@ -1842,13 +1842,6 @@ function renderSession(session, chatId) {
   const visible = rendered.filter((m) => m.kind !== 'pending');
   const expanded = expandedMessages.get(chatId);
 
-  // 最近 3 个其它会话，一点直达，省掉"返回列表→翻页→查看"
-  const recents = sessionsOf(platformId)
-    .filter((s) => s.id !== session.id)
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 3)
-    .map((s) => ({ id: s.id, title: title(s) }));
-
   return sessionCard({
     title: title(session),
     project: session.project,
@@ -1863,7 +1856,6 @@ function renderSession(session, chatId) {
     expandedMessage: expanded?.sessionId === session.id ? expanded : null,
     progress,
     stopped: busy ? '' : lastPartial.get(session.id) || '',
-    recents,
     hint,
     hasOlder: page < maxPage,
     hasNewer: page > 0,

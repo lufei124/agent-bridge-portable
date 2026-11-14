@@ -16,6 +16,5 @@
 
 - src/cards.mjs
 - src/index.mjs
-- src/platforms.mjs
 - tools/cards-smoke.mjs
 <!-- changed-files:end -->

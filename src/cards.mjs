@@ -282,7 +282,6 @@ export function sessionCard({
   expandedMessage = null,
   progress = null,
   stopped = '',
-  recents = [],
   hint = '',
   hasOlder = false,
   hasNewer = false,
@@ -341,25 +340,6 @@ export function sessionCard({
             ],
           },
           hr(),
-        ]
-      : []),
-    ...(recents.length
-      ? [
-          md('**最近会话**'),
-          {
-            tag: 'column_set',
-            flex_mode: 'none',
-            margin: '0px 0px 6px 0px',
-            columns: recents.map((recent, index) => {
-              const shortTitle = Array.from(recent.title).slice(0, 8).join('');
-              const label = /\p{Script=Han}/u.test(shortTitle) ? shortTitle : `会话 ${index + 1}`;
-              return {
-                tag: 'column',
-                width: 'auto',
-                elements: [btn(label, { a: 'open', s: recent.id })],
-              };
-            }),
-          },
         ]
       : []),
     ...(messages.length
