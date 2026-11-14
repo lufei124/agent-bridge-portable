@@ -15,6 +15,7 @@ import { CodexStore } from './core/codex.mjs';
 import { DshStore } from './core/dsh.mjs';
 import { conversationBrief, usefulProject } from './core/brief.mjs';
 import { conversationPage, conversationTurns, TURNS_PER_PAGE } from './core/conversation.mjs';
+import { replySuggestions } from './core/suggestions.mjs';
 import { explainFailure } from './core/failure.mjs';
 import { FeishuChannel } from './channels/feishu.mjs';
 import { runFresh, runSession } from './core/runner.mjs';
@@ -97,12 +98,6 @@ const lastPartial = new Map(); // sessionId -> 被停止时已生成的部分内
 const BOOT_AT = Date.now();
 let errorCount = 0; // 本次运行期间的失败次数（状态卡用）
 
-// 卡片上的快捷短语（可用环境变量覆盖：QUICK_REPLIES=继续|跑测试|看状态）
-const QUICK_REPLIES = String(process.env.QUICK_REPLIES || '继续|跑一下测试|看下状态')
-  .split('|')
-  .map((s) => s.trim())
-  .filter(Boolean)
-  .slice(0, 4);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const channel = new FeishuChannel({
@@ -223,7 +218,7 @@ async function handleCardAction(payload) {
       return clearQueue(chatId);
 
     case 'quick':
-      return quickSend(chatId, value.q);
+      return quickSend(chatId, value);
 
     case 'qtop':
       return topQueueItem(chatId, Number(value.i));
@@ -1646,26 +1641,29 @@ async function clearQueue(chatId) {
   };
 }
 
-/** 快捷短语：直接发一句固定的话 */
-async function quickSend(chatId, text) {
+/** Render and resolve suggested prompts against the same completed reply. */
+function suggestionsForTurn(turn) {
+  const reply = turn?.at(-1);
+  if (reply?.kind !== 'assistant') return [];
+  return replySuggestions(reply.parts.map(displayText).join('\n\n'));
+}
+
+async function quickSend(chatId, { s: sessionId, m: replyId, i: index, label }) {
   const session = boundSession(chatId);
   if (!session) return { toast: { type: 'error', content: '先打开一个会话' } };
+  const turn = conversationTurns(session.messages).at(-1);
+  const reply = turn?.at(-1);
+  if (session.id !== sessionId || !reply || messageId(reply) !== replyId || !Number.isSafeInteger(index)) {
+    return { toast: { type: 'info', content: '建议已更新，请打开当前会话再试' } };
+  }
   const blocked = readOnlyReason(session);
   if (blocked) return { toast: { type: 'info', content: blocked }, card: raw(renderSession(session, chatId)) };
+  if (isBusy(session)) return { toast: { type: 'info', content: '当前会话还在运行，请等回复完成' } };
 
-  const value = String(text || '').slice(0, 500);
-  if (!value) return { toast: { type: 'error', content: '内容为空' } };
+  const suggestion = suggestionsForTurn(turn)[index];
+  if (!suggestion || suggestion.label !== label) return { toast: { type: 'info', content: '建议已更新，请刷新会话' } };
 
-  if (isBusy(session)) {
-    enqueue(session.id, value, chatId);
-    await saveState();
-    return { toast: { type: 'success', content: '已排队' } };
-  }
-
-  startRun(chatId, session.id, value, { silent: true }).catch((err) =>
-    console.error('[run]', err?.message || err)
-  );
-  return { toast: { type: 'success', content: '已发送' }, card: raw(renderSession(session, chatId)) };
+  return submitFromCard(chatId, session.id, suggestion.text);
 }
 
 /** 卡片被点过并被原地替换：只摘登记，不撤回 */
@@ -1867,7 +1865,7 @@ function renderSession(session, chatId) {
     thinkingOff,
     // 状态色：电脑端占着=橙，运行中=绿，空闲=蓝
     tone: owner ? 'orange' : busy ? 'green' : 'blue',
-    quickReplies: readOnly ? [] : QUICK_REPLIES,
+    suggestions: !readOnly && !busy && page === 0 ? suggestionsForTurn(turns.at(-1)) : [],
     sessionId: session.id,
     platformId,
     readOnly,

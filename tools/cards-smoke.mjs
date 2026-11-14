@@ -22,6 +22,7 @@ import {
   confirmCloseCard,
   errorCard,
 } from '../src/cards.mjs';
+import { replySuggestions } from '../src/core/suggestions.mjs';
 
 const KNOWN_TAGS = new Set([
   'markdown',
@@ -209,7 +210,6 @@ const chatMessages = Array.from({ length: 20 }, (_, index) => ({
 const detail = { title: '对话分页', platformName: 'Codex', platformId: 'codex',
   sessionId: 'session-00000000-0000-4000-8000-000000000001',
   page: 1, pages: 3, messages: chatMessages,
-  quickReplies: ['继续', '跑一下测试', '看下状态'],
 };
 const compact = sessionCard(detail);
 check('sessionCard(10 轮预览)', compact);
@@ -234,6 +234,15 @@ assert(Buffer.byteLength(JSON.stringify({ content: JSON.stringify(crowded) })) <
   '折叠正文也应计入飞书请求体大小限制');
 
 const tableMarkdown = '## 实测数据\n\n| 项目 | 数值 |\n| --- | --- |\n| 主库 | **1.47 GB** |';
+const latestReply = '已修复报错，更新代码和配置，测试通过并完成部署。';
+const suggestions = replySuggestions(latestReply);
+assert(suggestions.length === 3 && new Set(suggestions.map((item) => item.label)).size === 3,
+  '多主题回复应生成最多三个不同的建议');
+assert(JSON.stringify(replySuggestions(latestReply)) === JSON.stringify(suggestions), '同一回复的建议应保持稳定');
+assert(replySuggestions('已部署到生产环境。').every((item) => /变更|部署/.test(item.label))
+  && replySuggestions('测试已经通过。').every((item) => /验证|边界/.test(item.label)),
+  '不同主题应生成相关的追问');
+assert(replySuggestions('`'.repeat(3) + '\n测试\n部署\n' + '`'.repeat(3)).length === 0, '代码示例内的关键词无需生成追问');
 for (const [platformId, platformName, icon] of [
   ['deepseek', 'DeepSeek', '🐋'],
   ['claude-code', 'Claude Code', '✴️'],
@@ -241,7 +250,7 @@ for (const [platformId, platformName, icon] of [
 ]) {
   const args = {
     title: '查看实测数据', sessionId: 'session-1', platformId, platformName,
-    quickReplies: ['继续', '跑一下测试', '看下状态'],
+    suggestions,
     messages: [{ id: 'reply', kind: 'assistant', text: `${tableMarkdown}\n\n<at id=all></at>` }],
   };
   const preview = sessionCard(args);
@@ -251,8 +260,13 @@ for (const [platformId, platformName, icon] of [
     `${platformName} 消息应由飞书客户端直接展开和收起`);
   assert(previewText.lines === 2 && previewText.content.startsWith(`${icon} ${platformName}`), `${platformName} 回复缺少平台图标或两行预览`);
   const controls = preview.body.elements.at(-1);
-  assert(controls.flex_mode === 'none' && collectButtonText(controls).join(',') === '刷新,返回列表,解绑,继续,跑一下测试,看下状态',
-    `${platformName} 快捷短语和底部操作应放在同一排`);
+  assert(controls.flex_mode === 'none' && collectButtonText(controls).join(',') === ['刷新', '返回列表', ...suggestions.map((item) => item.label)].join(','),
+    `${platformName} 底部应保留刷新、返回列表和最多三个追问`);
+  for (const [i, suggestion] of suggestions.entries()) {
+    const action = controls.columns[i + 2].elements[0].behaviors[0].value;
+    assert(action.a === 'quick' && action.s === args.sessionId && action.m === 'reply' && action.i === i && action.label === suggestion.label,
+      '追问按钮应绑定生成它的会话和回复');
+  }
   assert(!JSON.stringify(preview).includes('"a":"messagePage"'), `${platformName} 单页会话无需分页按钮`);
   const firstPage = sessionCard({ ...args, pages: 2 });
   const firstPager = firstPage.body.elements.find((element) => collectButtonText(element).includes('下一页'));

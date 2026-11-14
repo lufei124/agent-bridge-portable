@@ -312,7 +312,7 @@ export function sessionCard({
   pages = 1,
   thinkingOff = false,
   tone = '',
-  quickReplies = [],
+  suggestions = [],
   sessionId,
   platformId,
   readOnly = false,
@@ -431,8 +431,7 @@ export function sessionCard({
     compactFooter([
       btn('刷新', { a: 'open', s: sessionId }),
       btn('返回列表', { a: 'home' }),
-      btn('解绑', { a: 'closeAsk' }),
-      ...quickReplies.map((q) => btn(q, { a: 'quick', q })),
+      ...suggestions.map(({ label }, i) => btn(label, { a: 'quick', s: sessionId, m: messages.at(-1)?.id, i, label })),
     ]),
   ];
 

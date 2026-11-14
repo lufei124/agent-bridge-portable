@@ -417,7 +417,6 @@ Cursor 和 WorkBuddy 没有可用的续跑命令，不列入这张卡片。
 | `DSH_BIN` | | 自动找 `dsh.cmd` 旁边的 `node` 和 `bin.js` | DeepSeek 启动器。一般不用填 |
 | `POLL_MS` | | `800` | 轮询间隔，越小越实时越费 CPU |
 | `HISTORY_LIMIT` | | `60` | 每个会话保留的消息条数 |
-| `QUICK_REPLIES` | | `继续\|跑一下测试\|看下状态` | 卡片上的快捷按钮，`\|` 分隔，最多 4 个 |
 
 ## 附录 B · 给 Agent 的检查点
 

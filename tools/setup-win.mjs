@@ -252,8 +252,6 @@ function writeEnv(values) {
     '# POLL_MS=800',
     '# 每个会话在内存里保留多少条消息',
     '# HISTORY_LIMIT=60',
-    '# 会话卡片上的快捷短语，用 | 分隔，最多 4 个',
-    '# QUICK_REPLIES=继续|跑一下测试|看下状态',
     '',
   ];
   fs.writeFileSync(ENV_FILE, lines.join('\r\n'), 'utf8');
