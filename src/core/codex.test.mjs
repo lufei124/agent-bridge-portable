@@ -3,11 +3,21 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { CodexStore, mergeCodexParts, parseCodexLog } from './codex.mjs';
+import { codexTurnOutcome, CodexStore, mergeCodexParts, parseCodexLog } from './codex.mjs';
 
 function line(record) {
   return JSON.stringify(record);
 }
+
+test('matches the desktop turn ID and exact user input before reporting completion', () => {
+  const start = line({ type: 'event_msg', payload: { type: 'task_started', turn_id: 'desktop-turn' } });
+  const input = line({ type: 'response_item', payload: { role: 'user', content: [{ type: 'input_text', text: '验证同一会话' }] } });
+  const complete = line({ type: 'event_msg', payload: { type: 'task_complete', turn_id: 'desktop-turn' } });
+  const chunk = [start, input, complete].join('\n');
+  assert.equal(codexTurnOutcome(chunk, 'desktop-turn', '验证同一会话'), 'completed');
+  assert.equal(codexTurnOutcome(chunk, 'other-turn', '验证同一会话'), '');
+  assert.equal(codexTurnOutcome(chunk, 'desktop-turn', '验证'), '');
+});
 
 const sample = [
   line({

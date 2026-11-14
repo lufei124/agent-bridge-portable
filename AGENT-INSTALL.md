@@ -370,7 +370,7 @@ DeepSeek Harness（dsh）
 三条铁律，改 Claude 写回前必须先接受：
 
 1. **文件是唯一真相。** Claude 的上下文永远从 JSONL 重新读，不在内存里攒。
-2. **一条手机消息 = 一个一次性续跑进程。** Claude 是 `claude --resume`，Codex 是 `codex exec resume`，DeepSeek 是 `dsh --profile headless --session-id`。跑完就退，绝不常驻。
+2. **手机消息续聊原会话。** Claude 用 `claude --resume`。Windows 上已在 Codex 桌面端打开的会话由桌面进程接收消息，其余 Codex 会话用 `codex exec resume`。DeepSeek 按会话类型选择无界面续跑或本机 Web 会话服务。
 3. **同一 Claude 会话同一时刻只能有一个持有者。** 靠 `~/.claude/sessions/*.json` 里的 PID 探测，电脑端正在用就拒绝手机端发送，只给「强制接管」。
 
 Cursor 和 WorkBuddy 没有可用的续跑命令，不列入这张卡片。

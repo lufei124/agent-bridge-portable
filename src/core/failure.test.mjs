@@ -14,7 +14,7 @@ test('matches real HTTP auth errors, without matching digits inside a session id
 
 test('identifies Codex desktop ownership and missing DeepSeek credentials separately', () => {
   const busy = explainFailure('thread has already changed: thread 123 already has an active writer', 'codex');
-  assert.match(busy.detail, /关闭这个 Codex 会话/);
+  assert.match(busy.detail, /打开对应 Codex 会话/);
   assert.equal(busy.retry, true);
   const missing = explainFailure('dsh: MISSING_CREDENTIAL: llm-deepseek: no API key for provider route', 'deepseek');
   assert.match(missing.detail, /保存 API Key/);

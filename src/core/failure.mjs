@@ -2,8 +2,17 @@ export const DEEPSEEK_PRESET_REASON = '此 DeepSeek 会话使用电脑端预设�
 
 export function explainFailure(text, platform) {
   const value = String(text || '');
+  if (platform === 'codex' && /CODEX_DESKTOP_(?:UNCONFIRMED|TURN_FAILED)/.test(value)) {
+    return { title: '请在电脑端查看 Codex 回合', detail: '飞书未能确认这轮结果。请检查原会话是否已有这条消息，再决定是否重新发送。', retry: false };
+  }
+  if (platform === 'codex' && /CODEX_DESKTOP_BUSY/.test(value)) {
+    return { title: 'Codex 桌面会话仍在运行', detail: '等电脑端当前回合结束后，再从飞书重发。', retry: true };
+  }
+  if (platform === 'codex' && /CODEX_DESKTOP_UNAVAILABLE/.test(value)) {
+    return { title: '未能连接 Codex 桌面会话', detail: '请在电脑端打开对应会话，再从飞书重发。', retry: true };
+  }
   if (platform === 'codex' && /already has an active writer/i.test(value)) {
-    return { title: 'Codex 会话正由电脑端使用', detail: '请在电脑上关闭这个 Codex 会话，再重发。', retry: true };
+    return { title: 'Codex 会话正被其他进程使用', detail: '请在电脑端打开对应 Codex 会话，再从飞书重发。若它开在独立命令行里，请先结束该命令行会话。', retry: true };
   }
   if (platform === 'deepseek' && /session\/writer-held|SessionAlreadyOwnedError/i.test(value)) {
     return { title: 'DeepSeek 会话正在使用', detail: '请先在电脑端关闭原会话或等当前一轮结束，再从飞书重发。', retry: true };

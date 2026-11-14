@@ -13,6 +13,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 import { runPresetSession } from './dsh-web.mjs';
 import { waitForDshTurn } from './dsh.mjs';
+import { runDesktopCodex } from './codex-desktop.mjs';
 
 const WINDOWS_BIN = path.join(
   os.homedir(),
@@ -238,9 +239,12 @@ export function runFresh(options) {
   return runClaude({ ...options, args: [] });
 }
 
-export function runSession(options) {
+export async function runSession(options) {
   const platform = options.platform || 'claude-code';
-  if (platform === 'codex') return runCodex(options);
+  if (platform === 'codex') {
+    const desktop = await runDesktopCodex(options);
+    return desktop ?? runCodex(options);
+  }
   if (platform === 'deepseek') {
     if (options.agentPreset) {
       return runPresetSession(resolveDshLaunch(), {

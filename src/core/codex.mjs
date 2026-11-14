@@ -17,6 +17,27 @@ const TAIL_BYTES = 512 * 1024;
 
 export const DEFAULT_CODEX_DIR = path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'sessions');
 
+export function codexTurnOutcome(chunk, turnId, prompt) {
+  let matched = false;
+  let seenPrompt = false;
+  for (const line of chunk.split('\n')) {
+    let row;
+    try { row = JSON.parse(line); } catch { continue; }
+    const event = row.payload;
+    if (row.type === 'event_msg' && event?.type === 'task_started') {
+      matched = event.turn_id === turnId;
+      if (matched) seenPrompt = false;
+    }
+    if (!matched) continue;
+    if (row.type === 'response_item' && event?.role === 'user' && messageText(event.content) === prompt.trim()) seenPrompt = true;
+    if (row.type === 'event_msg' && event?.turn_id === turnId) {
+      if (event.type === 'task_complete' && seenPrompt) return 'completed';
+      if (event.type === 'turn_aborted') return 'aborted';
+    }
+  }
+  return '';
+}
+
 export function parseCodexLog(text, options = {}) {
   const historyLimit = options.historyLimit || 60;
   const lines = String(text || '').split(/\n/);
@@ -75,7 +96,7 @@ function applyRecord(parsed, record) {
 
   if (record.type === 'event_msg') {
     if (payload.type === 'task_started') parsed.running = true;
-    else if (payload.type === 'task_complete') parsed.running = false;
+    else if (payload.type === 'task_complete' || payload.type === 'turn_aborted') parsed.running = false;
     return;
   }
 

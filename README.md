@@ -12,7 +12,7 @@ Claude Code 把每个会话追加写入 `~/.claude/projects/<项目路径编码>
 Codex 把会话写在 `~/.codex/sessions/**/rollout-*.jsonl`。
 DeepSeek Harness 把会话写在 `~/.dsh/sessions/**/session.v4.jsonl.zstd`。
 本程序读这些文件，再通过飞书长连接收发消息——**不改插件、不注入、不开公网端口**。
-Codex 用 `codex exec resume` 续跑。DeepSeek 的无界面会话继续使用 `dsh --profile headless --session-id`。带桌面端预设的会话通过仅监听本机的 DeepSeek Web 会话服务续跑，保留同一个会话编号、预设和历史。
+Windows 上，桥接优先通过 Codex 桌面端的本地命名管道把消息转给持有原会话的桌面进程。没有桌面持有者时，Codex 用 `codex exec resume` 续跑。DeepSeek 的无界面会话继续使用 `dsh --profile headless --session-id`。带桌面端预设的会话通过仅监听本机的 DeepSeek Web 会话服务续跑，保留同一个会话编号、预设和历史。
 Codex 里同一个会话编号的多份 rollout 合成一条。大文件只读开头（标题）和末尾（最近对话）。
 
 ```
@@ -93,7 +93,11 @@ tools/setup-win.mjs       一键安装脚本
 | `/notify on\|off` | 回合结束是否另发摘要 |
 | `/clean on\|off` | 群聊里是否撤回你发的消息 |
 
-Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。选好项目目录后发第一条消息，桥接会在任务完成后打开新会话。续聊已有会话时，先点「查看」再发送。续跑会把结果写回各自的会话文件。Codex 桌面端占用会话时，请先关闭对应会话。桥接会让 DeepSeek Harness 无界面模式读取同一 Harness 配置目录里已保存的 API Key。也可以在桥的本地 `.env` 中设置 `DEEPSEEK_API_KEY` 作为备用。
+Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。选好项目目录后发第一条消息，桥接会在任务完成后打开新会话。续聊已有会话时，先点「查看」再发送。续跑会把结果写回各自的会话文件。
+
+在 Windows 上可以保留 Codex 桌面端原会话，再从飞书发送。桌面端处理这轮消息，并沿用该会话设置。桌面正在运行时，桥接等它空闲后再送入下一轮。桌面端处理的回合可在电脑端停止。桥接通过原会话记录核对完成情况。结果未确认时，请查看原会话，避免重复发送。桌面本地协议可能随 Codex 更新变化。
+
+桥接会让 DeepSeek Harness 无界面模式读取同一 Harness 配置目录里已保存的 API Key。也可以在桥的本地 `.env` 中设置 `DEEPSEEK_API_KEY` 作为备用。
 
 对于原有的 DeepSeek 桌面会话，请在飞书的 DeepSeek 列表打开原会话后发送消息。会话沿用原来的模型与登录方式。电脑端占用原会话时，请先关闭对应会话再重发。桥接使用与桌面端相同的 `DSH_HOME`（默认 `~/.dsh`）。如果原会话服务启动失败，在电脑的命令提示符中运行 `check.cmd --deepseek`。该命令检查会话服务和文件权限，不提交聊天消息。
 
@@ -135,8 +139,13 @@ Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。�
 <!-- changed-files:start -->
 ### 本次提交修改的文件
 
+- AGENT-INSTALL.md
+- src/core/codex-desktop.mjs
+- src/core/codex-desktop.test.mjs
+- src/core/codex.mjs
+- src/core/codex.test.mjs
+- src/core/failure.mjs
+- src/core/failure.test.mjs
 - src/core/runner.mjs
-- src/core/suggestions.mjs
-- src/core/suggestions.test.mjs
 - src/index.mjs
 <!-- changed-files:end -->

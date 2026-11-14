@@ -11,7 +11,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { TranscriptStore } from './core/transcript.mjs';
-import { CodexStore } from './core/codex.mjs';
+import { CodexStore, codexTurnOutcome } from './core/codex.mjs';
 import { DshStore } from './core/dsh.mjs';
 import { conversationBrief, usefulProject } from './core/brief.mjs';
 import { conversationPage, conversationTurns, TURNS_PER_PAGE } from './core/conversation.mjs';
@@ -90,6 +90,7 @@ const streaming = new Map(); // sessionId -> 本轮正在生成、还没落进 t
 const thinkingBuf = new Map(); // sessionId -> 模型正在思考的内容（没有正文时顶上）
 const runSteps = new Map(); // sessionId -> 本轮已经执行的工具步数（只报数，不报内容）
 const runningChild = new Map(); // sessionId -> 当前运行中子进程 PID
+const desktopRuns = new Set(); // 由桌面端处理的 Codex 回合
 const canceledRuns = new Set(); // sessionId -> 用户主动点了「停止」
 const phoneTurns = new Map(); // sessionId -> 手机发起这一轮时的原始消息 id
 const cleanupWarned = new Set(); // chatId -> 群消息撤回失败只提示一次
@@ -453,7 +454,7 @@ async function submitFromCard(chatId, sessionId, text) {
     };
   }
 
-  if (isBusy(session)) {
+  if (isBusy(session) && platformOf(session) !== 'codex') {
     const token = randomUUID();
     drafts.set(token, { text: prompt, sessionId: session.id, chatId, at: Date.now() });
     return {
@@ -927,7 +928,7 @@ async function handleIncomingInner({ chatId, text, openId, messageId, media, cha
   const blocked = readOnlyReason(session);
   if (blocked) return channel.sendText(chatId, blocked);
 
-  if (isBusy(session)) {
+  if (inflight.has(session.id) || (platformOf(session) !== 'codex' && isBusy(session))) {
     // 不再问「立即插入还是排队」：默认排队，少一次交互。
     // 想优先执行用 /now 内容（排到队首，结束立刻跑）。
     // 反馈用表情而不是新消息，避免聊天被"已排队"刷屏。
@@ -1002,6 +1003,7 @@ async function startRun(chatId, sessionId, text, options = {}) {
 
   // 记下发送前的文件长度，跑完用来验证"这条到底落没落进会话"
   const sizeBefore = fileSize(session.file);
+  let checkedSize = sizeBefore;
 
   // 运行期间每 3 秒巡逻：如果电脑端中途接手（重开了标签页），立刻停下自己，
   // 避免两边同时往同一个会话里写。
@@ -1033,6 +1035,13 @@ async function startRun(chatId, sessionId, text, options = {}) {
       cwd: session.cwd,
       projectDir: session.projectDir,
       prompt: text,
+      onDesktop: () => desktopRuns.add(session.id),
+      confirmTurn: (turnId, prompt) => {
+        const size = fileSize(session.file);
+        if (size <= checkedSize) return '';
+        checkedSize = size;
+        return codexTurnOutcome(readFrom(session.file, sizeBefore), turnId, prompt);
+      },
       onSpawn: (pid) => {
         childPid = pid;
         runningChild.set(session.id, pid);
@@ -1075,6 +1084,7 @@ async function startRun(chatId, sessionId, text, options = {}) {
     thinkingBuf.delete(session.id);
     runSteps.delete(session.id);
     runningChild.delete(session.id);
+    desktopRuns.delete(session.id);
     // 不在这里停刷新：用户可能还停在卡片上，之后的电脑端回合也要能实时看到
   }
 
@@ -1120,7 +1130,15 @@ async function startRun(chatId, sessionId, text, options = {}) {
   } else {
     recordPhoneSend(session.id, text);
     await saveState();
-    if (session.agentPreset && platformOf(session) === 'deepseek') {
+    if (result.desktop) {
+      console.log('[codex-desktop] 原会话已确认完成');
+      await codexStore.scan();
+      const updated = findSession(session.id);
+      if (updated) {
+        await notifyTurnEnd(updated);
+        await maybePhoneSummary(updated);
+      }
+    } else if (session.agentPreset && platformOf(session) === 'deepseek') {
       await dshStore.scan();
       const updated = findSession(session.id);
       if (updated) await notifyTurnEnd(updated);
@@ -1396,6 +1414,7 @@ async function stopRun(chatId, options = {}) {
   if (!session) return { toast: { type: 'error', content: '会话不存在' } };
 
   const pid = runningChild.get(session.id);
+  if (desktopRuns.has(session.id)) return { toast: { type: 'info', content: '这轮由电脑端 Codex 执行，请在电脑端停止' } };
   if (!pid) return { toast: { type: 'info', content: '这个会话现在没有在跑' } };
 
   const queueCount = (state.queues[session.id] || []).length;
@@ -1831,7 +1850,7 @@ function renderSession(session, chatId, suggestions) {
 
   // 谁持有这个会话：电脑端进程登记在 ~/.claude/sessions/，我们自己的回合算手机
   const owner = findOwners(session.id).find((o) => o.pid !== process.pid);
-  const holder = owner ? '🖥 电脑端' : busy ? '📱 手机' : '⚪ 空闲';
+  const holder = owner || desktopRuns.has(session.id) ? '🖥 电脑端' : busy ? '📱 手机' : '⚪ 空闲';
 
   // 手机上写过东西之后，提醒一句：电脑端要重开标签页才看得到
   const lastPhone = state.phoneSends?.[session.id]?.at;
