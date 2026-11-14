@@ -15,5 +15,8 @@
 ### 本次提交修改的文件
 
 - src/cards.mjs
+- src/core/suggestions.mjs
+- src/core/suggestions.test.mjs
+- src/index.mjs
 - tools/cards-smoke.mjs
 <!-- changed-files:end -->

@@ -1641,27 +1641,20 @@ async function clearQueue(chatId) {
   };
 }
 
-/** Render and resolve suggested prompts against the same completed reply. */
-function suggestionsForTurn(turn) {
-  const reply = turn?.at(-1);
-  if (reply?.kind !== 'assistant') return [];
-  return replySuggestions(reply.parts.map(displayText).join('\n\n'));
-}
-
-async function quickSend(chatId, { s: sessionId, m: replyId, i: index, label }) {
+async function quickSend(chatId, { s: sessionId, m: replyId, t: token }) {
   const session = boundSession(chatId);
   if (!session) return { toast: { type: 'error', content: '先打开一个会话' } };
-  const turn = conversationTurns(session.messages).at(-1);
-  const reply = turn?.at(-1);
-  if (session.id !== sessionId || !reply || messageId(reply) !== replyId || !Number.isSafeInteger(index)) {
+  const turns = conversationTurns(session.messages);
+  const reply = turns.at(-1)?.at(-1);
+  if (session.id !== sessionId || reply?.kind !== 'assistant' || messageId(reply) !== replyId || typeof token !== 'string') {
     return { toast: { type: 'info', content: '建议已更新，请打开当前会话再试' } };
   }
   const blocked = readOnlyReason(session);
   if (blocked) return { toast: { type: 'info', content: blocked }, card: raw(renderSession(session, chatId)) };
   if (isBusy(session)) return { toast: { type: 'info', content: '当前会话还在运行，请等回复完成' } };
 
-  const suggestion = suggestionsForTurn(turn)[index];
-  if (!suggestion || suggestion.label !== label) return { toast: { type: 'info', content: '建议已更新，请刷新会话' } };
+  const suggestion = replySuggestions(turns).find((item) => item.token === token);
+  if (!suggestion) return { toast: { type: 'info', content: '建议已更新，请刷新会话' } };
 
   return submitFromCard(chatId, session.id, suggestion.text);
 }
@@ -1865,7 +1858,7 @@ function renderSession(session, chatId) {
     thinkingOff,
     // 状态色：电脑端占着=橙，运行中=绿，空闲=蓝
     tone: owner ? 'orange' : busy ? 'green' : 'blue',
-    suggestions: !readOnly && !busy && page === 0 ? suggestionsForTurn(turns.at(-1)) : [],
+    suggestions: !readOnly && !busy && page === 0 ? replySuggestions(turns) : [],
     sessionId: session.id,
     platformId,
     readOnly,

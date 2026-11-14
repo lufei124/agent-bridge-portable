@@ -432,7 +432,7 @@ export function sessionCard({
     footer([
       btn('刷新', { a: 'open', s: sessionId }),
       btn('返回列表', { a: 'home' }),
-      ...suggestions.map(({ label }, i) => btn(label, { a: 'quick', s: sessionId, m: messages.at(-1)?.id, i, label })),
+      ...suggestions.map(({ label, token }) => btn(label, { a: 'quick', s: sessionId, m: messages.at(-1)?.id, t: token })),
     ]),
   ];
 

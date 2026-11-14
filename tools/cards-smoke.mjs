@@ -22,7 +22,6 @@ import {
   confirmCloseCard,
   errorCard,
 } from '../src/cards.mjs';
-import { replySuggestions } from '../src/core/suggestions.mjs';
 
 const KNOWN_TAGS = new Set([
   'markdown',
@@ -245,15 +244,7 @@ assert(manyTables.body.elements.filter((element) => element.tag === 'collapsible
   (child) => child.content === tableMarkdown,
 )).length === 4 && collectButtonText(manyTables).filter((label) => label === '展开').length === 2,
 '同一卡片的表格需要计入总量，超出部分通过展开按需载入');
-const latestReply = '已修复报错，更新代码和配置，测试通过并完成部署。';
-const suggestions = replySuggestions(latestReply);
-assert(suggestions.length === 3 && new Set(suggestions.map((item) => item.label)).size === 3,
-  '多主题回复应生成最多三个不同的建议');
-assert(JSON.stringify(replySuggestions(latestReply)) === JSON.stringify(suggestions), '同一回复的建议应保持稳定');
-assert(replySuggestions('已部署到生产环境。').every((item) => /变更|部署/.test(item.label))
-  && replySuggestions('测试已经通过。').every((item) => /验证|边界/.test(item.label)),
-  '不同主题应生成相关的追问');
-assert(replySuggestions('`'.repeat(3) + '\n测试\n部署\n' + '`'.repeat(3)).length === 0, '代码示例内的关键词无需生成追问');
+const suggestions = ['看分页验证', '看表格上限', '看连接状态'].map((label, i) => ({ label, token: `token-${i}` }));
 for (const [platformId, platformName, icon] of [
   ['deepseek', 'DeepSeek', '🐋'],
   ['claude-code', 'Claude Code', '✴️'],
@@ -278,7 +269,7 @@ for (const [platformId, platformName, icon] of [
     `${platformName} 会话底部按钮应使用飞书默认尺寸`);
   for (const [i, suggestion] of suggestions.entries()) {
     const action = controls.columns[i + 2].elements[0].behaviors[0].value;
-    assert(action.a === 'quick' && action.s === args.sessionId && action.m === 'reply' && action.i === i && action.label === suggestion.label,
+    assert(action.a === 'quick' && action.s === args.sessionId && action.m === 'reply' && action.t === suggestion.token,
       '追问按钮应绑定生成它的会话和回复');
   }
   assert(!JSON.stringify(preview).includes('"a":"messagePage"'), `${platformName} 单页会话无需分页按钮`);
