@@ -1,0 +1,115 @@
+# agent-bridge
+
+在家里电脑上常驻。一个飞书私聊就能看到本机的 Claude Code、Codex 和 DeepSeek 会话，并接着发消息。做完会推回飞书。
+
+> 便携包自带 Node 和依赖。通过 GitHub 获取源码时，请先安装 Node.js 24 或更新版本并运行 `npm ci`，
+> 然后双击 `install.cmd` 配置飞书。
+> 完整安装步骤见 **[AGENT-INSTALL.md](AGENT-INSTALL.md)**。
+
+## 原理
+
+Claude Code 把每个会话追加写入 `~/.claude/projects/<项目路径编码>/<sessionId>.jsonl`。
+Codex 把会话写在 `~/.codex/sessions/**/rollout-*.jsonl`。
+DeepSeek Harness 把会话写在 `~/.dsh/sessions/**/session.v4.jsonl.zstd`。
+本程序读这些文件，再通过飞书长连接收发消息——**不改插件、不注入、不开公网端口**。
+Codex 用 `codex exec resume` 续跑。DeepSeek 的无界面会话继续使用 `dsh --profile headless --session-id`。带桌面端预设的会话通过仅监听本机的 DeepSeek Web 会话服务续跑，保留同一个会话编号、预设和历史。
+Codex 里同一个会话编号的多份 rollout 合成一条。大文件只读开头（标题）和末尾（最近对话）。
+
+```
+~/.claude/projects/**/*.jsonl ──增量读取──► TranscriptStore ──► 飞书长连接
+        ▲                                      │                    │
+        │ claude --resume                      │                    │ 手机消息
+        └──────── runner ◄─────────────────────┘                    │
+                                                                    │
+~/.codex/sessions/**/rollout-*.jsonl ──读取──► CodexStore ──► codex exec resume
+~/.dsh/sessions/**/session.v4.jsonl.zstd ──读取──► DshStore ──► dsh headless / 本机 Web 会话服务
+```
+
+## 快速开始
+
+```
+1. 解压到 D:\agent-bridge 这类纯英文路径
+2. 双击 install.cmd      （四个交互步骤：体检、填凭证、装自启、启动）
+3. 看到日志出现 ws client ready
+4. 去 open.feishu.cn 配事件订阅与卡片回调，发布应用
+5. 飞书里私聊机器人发 hi
+```
+
+第 4 步的顺序很关键：**必须先跑起长连接，再去后台保存「订阅方式」**，否则存不住。详见 AGENT-INSTALL.md 第 4 节。
+
+手工启动 / 调试：
+
+```bat
+start.cmd            :: 前台跑，日志打在窗口里
+check.cmd            :: 体检，一条命令告诉你卡在哪
+stop.cmd             :: 停掉
+```
+
+## 飞书配置摘要
+
+1. 创建**企业自建应用**（商店应用不支持长连接）
+2. 添加**机器人**能力
+3. 开权限：`im:message.p2p_msg:readonly`、`im:message:send_as_bot`、`im:message.group_at_msg:readonly`
+4. 事件订阅选**长连接**，加 `im.message.receive_v1`
+5. 回调配置选**长连接**，加 `card.action.trigger`
+6. 创建版本并发布
+
+## 目录
+
+```
+src/index.mjs             守护进程：会话路由 + 卡片交互
+src/cards.mjs             飞书卡片渲染
+src/platforms.mjs         多编辑器登记表（Claude、Codex、DeepSeek 可写）
+src/channels/feishu.mjs   长连接收发
+src/core/transcript.mjs   监听 + 增量解析 Claude JSONL
+src/core/codex.mjs        读取 Codex rollout，合成会话列表
+src/core/dsh.mjs          读取 DeepSeek Harness 会话
+src/core/normalize.mjs    原始记录 → 与通道无关的事件
+src/core/runner.mjs       一条消息 = 一次 claude --resume（仅 Claude）
+src/core/patrol.mjs       会话持有者探测（~/.claude/sessions）
+src/core/holder.mjs       长驻进程备件，未接主路径
+src/cli/list.mjs          会话列表（命令行）
+src/cli/watch.mjs         实时流水（命令行调试用）
+tools/watchdog.mjs        看门狗，进程挂了自己拉起来
+tools/setup-win.mjs       一键安装脚本
+```
+
+## 手机端命令
+
+| 发送 | 作用 |
+|---|---|
+| `hi` / `列表` | 一张卡片列出本机全部会话。顶部可切「全部 / Claude / Codex / DeepSeek」 |
+| `Claude` / `Codex` / `DeepSeek` | 直接打开对应那一列。整句匹配，适合填进飞书机器人菜单的「发送文字消息」 |
+| `打开 <短ID>` | 把当前飞书对话绑定到某个会话 |
+| `关闭` | 解绑，回到全部会话 |
+| `/new deepseek` | 选项目目录，在飞书创建一条可续跑的 DeepSeek 会话 |
+| `状态` | 查看绑定、运行状态、排队数 |
+| 直接发文字 | 送进当前打开的 Claude、Codex 或 DeepSeek 会话。它正在跑就自动排队 |
+| `1` / `2` | 会话正忙时选择「立即插入」或「排队」 |
+| `/now <文字>` | 无视忙闲，排到队首 |
+| `/queue <文字>` | 无视忙闲，排队执行 |
+| `/files` `/use N` `/drop` | 附件管理 |
+| `/find <关键字>` | 搜索会话 |
+| `/notify on\|off` | 回合结束是否另发摘要 |
+| `/clean on\|off` | 群聊里是否撤回你发的消息 |
+
+在列表上先选「查看」打开目标会话，再输入消息。续跑会把结果写回各自的会话文件。Codex 桌面端占用会话时，请先关闭对应会话。桥接会让 DeepSeek Harness 无界面模式读取同一 Harness 配置目录里已保存的 API Key。也可以在桥的本地 `.env` 中设置 `DEEPSEEK_API_KEY` 作为备用。
+
+对于原有的 DeepSeek 桌面会话，请在飞书的 DeepSeek 列表打开原会话后发送消息。会话沿用原来的模型与登录方式。电脑端占用原会话时，请先关闭对应会话再重发。桥接使用与桌面端相同的 `DSH_HOME`（默认 `~/.dsh`）。
+
+## 已知限制
+
+- 一个回合内的消息不逐条推送，只在 `end_turn` 时推一条摘要。
+- 飞书收到消息必须 3 秒内响应，因此消息处理一律异步，先回执后出结果。
+- 长连接是集群模式：同一应用开多个实例时，消息只会被随机一个实例收到。**不要同时跑两份**（已用 PID 锁拦截）。
+- 执行权限为 `bypassPermissions`（完全放行）。第一个发消息的人会被记录为唯一所有者，其他人的消息一律忽略。要换人，删除 `data/state.json` 里的 `ownerOpenId`。
+- 手机消息「立即插入」正在电脑上运行的会话时，可能与电脑上的操作交错，这是已知取舍。
+- 开机自启与进程结束目前只有 Windows 实现。
+- Cursor、WorkBuddy 没有可用的续跑命令，不在这张卡片里。MarsCode、Gemini 仍未接入。
+
+## 规划
+
+- M1 看板：会话列表 + 实时流水 ✅
+- M2 通知：回合结束推送 ✅
+- M3 写回：手机消息送进电脑上的会话 ✅
+- M4 多编辑器：Codex、DeepSeek 已能列出并续跑。进程守护（开机自启、崩溃重启）已有 Windows 实现
