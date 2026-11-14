@@ -274,6 +274,8 @@ for (const [platformId, platformName, icon] of [
   const controls = preview.body.elements.at(-1);
   assert(controls.flex_mode === 'none' && collectButtonText(controls).join(',') === ['刷新', '返回列表', ...suggestions.map((item) => item.label)].join(','),
     `${platformName} 底部应保留刷新、返回列表和最多三个追问`);
+  assert(controls.columns.every((column) => column.elements[0].size === undefined),
+    `${platformName} 会话底部按钮应使用飞书默认尺寸`);
   for (const [i, suggestion] of suggestions.entries()) {
     const action = controls.columns[i + 2].elements[0].behaviors[0].value;
     assert(action.a === 'quick' && action.s === args.sessionId && action.m === 'reply' && action.i === i && action.label === suggestion.label,
