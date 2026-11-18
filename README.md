@@ -115,6 +115,8 @@ Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。�
 
 原生折叠面板里的表格也计入单张卡片的限制，表格较多时可通过「展开」按需载入和分段阅读。飞书拒绝更新卡片时，可在 `data/bridge.log` 查看具体的校验错误。
 
+助手回复里的 Markdown 图片会显示图片说明和文件路径或网址。手机上传并已取得飞书图片标识的附件仍可预览。
+
 ## 已知限制
 
 - 一个回合内的消息不逐条推送，只在 `end_turn` 时推一条摘要。
@@ -139,6 +141,8 @@ Claude、Codex 和 DeepSeek 的列表都有对应的「新建会话」按钮。�
 <!-- changed-files:start -->
 ### 本次提交修改的文件
 
-- src/core/codex.mjs
-- src/core/codex.test.mjs
+- src/cards.mjs
+- src/core/card-markdown.mjs
+- src/core/card-markdown.test.mjs
+- tools/cards-smoke.mjs
 <!-- changed-files:end -->

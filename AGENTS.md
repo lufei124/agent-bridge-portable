@@ -14,6 +14,8 @@
 <!-- changed-files:start -->
 ### 本次提交修改的文件
 
-- src/core/codex.mjs
-- src/core/codex.test.mjs
+- src/cards.mjs
+- src/core/card-markdown.mjs
+- src/core/card-markdown.test.mjs
+- tools/cards-smoke.mjs
 <!-- changed-files:end -->

@@ -1,5 +1,6 @@
 import { findPlatform, sessionFilterName } from './platforms.mjs';
 import { markdownTableStarts, MARKDOWN_TABLE_LIMIT, messageTextPages } from './core/conversation.mjs';
+import { cardMarkdown } from './core/card-markdown.mjs';
 
 /**
  * 飞书卡片 JSON 2.0 构建。
@@ -28,7 +29,7 @@ const btn = (text, value, type = 'default') => ({
   behaviors: [{ type: 'callback', value }],
 });
 
-const md = (content) => ({ tag: 'markdown', content });
+const md = (content) => ({ tag: 'markdown', content: cardMarkdown(content) });
 
 /** 行首状态点：有未读完成就盖掉运行状态 */
 const dot = (item) => (item.unread ? '🔴' : item.busy ? '🟢' : '⚪');
@@ -266,7 +267,7 @@ function messageElements(message, assistantName, sessionId, expandedMessage, nat
   };
   if (!expanded && message.text.length >= DETAIL_CARD_BUDGET) return [header];
   // Preserve Markdown formatting without letting historical text notify people again.
-  const body = message.text.replace(/<(?=\/?at(?:\s|\/?>))/gi, '&lt;');
+  const body = cardMarkdown(message.text.replace(/<(?=\/?at(?:\s|\/?>))/gi, '&lt;'));
   const images = (message.images || []).slice(0, 3).map((key) => ({ tag: 'img', img_key: key, preview: true }));
   if (!expanded) {
     if (body.trim() || images.length) {

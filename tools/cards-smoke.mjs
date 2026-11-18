@@ -255,6 +255,11 @@ for (const [platformId, platformName, icon] of [
     suggestions,
     messages: [{ id: 'reply', kind: 'assistant', text: `${tableMarkdown}\n\n<at id=all></at>` }],
   };
+  const screenshotReply = sessionCard({ ...args, messages: [
+    { id: 'screenshot', kind: 'assistant', text: '**验收截图**\n![手机端](D:/project/.tmp/acceptance/screenshot.png)' },
+  ] });
+  check(`sessionCard(${platformName} 本地截图引用)`, screenshotReply);
+  assert(!JSON.stringify(screenshotReply).includes('![手机端]('), `${platformName} 本地路径应以文件引用显示`);
   const preview = sessionCard(args);
   check(`sessionCard(${platformName} 原生折叠)`, preview);
   const panel = preview.body.elements[2];
